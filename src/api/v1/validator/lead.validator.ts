@@ -18,6 +18,14 @@ export const createLeadSchema = z.object({
 })
 
 export const updateLeadSchema = z.object({
+  name: z.string().trim().min(2).optional(),
+  fatherName: nullableText,
+  email: nullableText,
+  phone: z.string().trim().min(5).optional(),
+  whatsapp: nullableText,
+  city: nullableText,
+  address: nullableText,
   message: z.string().trim().min(1),
   status: z.enum(leadStatusValues),
+  departmentId: z.string().trim().min(1).optional(),
 })

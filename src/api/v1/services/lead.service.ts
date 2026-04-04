@@ -38,8 +38,16 @@ type LeadPayload = {
 }
 
 type UpdateLeadPayload = {
+  name?: string
+  fatherName?: string | null
+  email?: string | null
+  phone?: string
+  whatsapp?: string | null
+  city?: string | null
+  address?: string | null
   status?: LeadStatusValue
-  message?: string | null
+  message: string
+  departmentId?: string
 }
 
 type LeadCreatePayload = {
@@ -282,25 +290,82 @@ function normalizeLeadCreatePayload(payload: LeadPayload) {
   }
 }
 
-function normalizeLeadUpdatePayload(payload: UpdateLeadPayload, currentLead: LeadRecord) {
+function normalizeLeadAdminUpdatePayload(payload: UpdateLeadPayload, currentLead: LeadRecord) {
   return {
+    name: normalizeRequiredText(payload.name ?? currentLead.name),
+    fatherName:
+      payload.fatherName !== undefined
+        ? normalizeOptionalText(payload.fatherName)
+        : currentLead.fatherName,
+    email: payload.email !== undefined ? normalizeOptionalText(payload.email) : currentLead.email,
+    phone: payload.phone !== undefined ? normalizeLeadPhone(payload.phone) : currentLead.phone,
+    whatsapp:
+      payload.whatsapp !== undefined
+        ? normalizeOptionalText(payload.whatsapp)
+        : currentLead.whatsapp,
+    city: payload.city !== undefined ? normalizeOptionalText(payload.city) : currentLead.city,
+    address:
+      payload.address !== undefined ? normalizeOptionalText(payload.address) : currentLead.address,
+    message: normalizeRequiredText(payload.message),
     status: payload.status ?? currentLead.status,
-    message: normalizeRequiredText(payload.message ?? currentLead.message ?? ''),
+    departmentId: payload.departmentId ?? currentLead.department.id,
   }
 }
 
-function buildLeadHistoryEntry(currentLead: LeadRecord, nextStatus: LeadStatusValue, message: string) {
+function normalizeLeadManagerUpdatePayload(payload: UpdateLeadPayload, currentLead: LeadRecord) {
+  return {
+    status: payload.status ?? currentLead.status,
+    message: normalizeRequiredText(payload.message),
+  }
+}
+
+function buildLeadHistoryEntry(
+  currentLead: LeadRecord,
+  nextLead: ReturnType<typeof normalizeLeadAdminUpdatePayload> | ReturnType<typeof normalizeLeadManagerUpdatePayload>,
+  role?: CurrentUserRole,
+) {
   const historyParts: string[] = []
   let action = 'UPDATED'
 
-  if (nextStatus !== currentLead.status) {
-    historyParts.push(`Status changed to ${nextStatus.replaceAll('_', ' ')}`)
+  if (isAdmin(role)) {
+    if ('name' in nextLead && nextLead.name !== currentLead.name) {
+      historyParts.push(`Name changed to ${nextLead.name}`)
+    }
+    if ('fatherName' in nextLead && nextLead.fatherName !== currentLead.fatherName) {
+      historyParts.push(`Father name changed to ${nextLead.fatherName || 'Not provided'}`)
+    }
+    if ('email' in nextLead && nextLead.email !== currentLead.email) {
+      historyParts.push(`Email changed to ${nextLead.email || 'Not provided'}`)
+    }
+    if ('phone' in nextLead && nextLead.phone !== currentLead.phone) {
+      historyParts.push(`Phone changed to ${nextLead.phone}`)
+    }
+    if ('whatsapp' in nextLead && nextLead.whatsapp !== currentLead.whatsapp) {
+      historyParts.push(`WhatsApp changed to ${nextLead.whatsapp || 'Not provided'}`)
+    }
+    if ('city' in nextLead && nextLead.city !== currentLead.city) {
+      historyParts.push(`City changed to ${nextLead.city || 'Not provided'}`)
+    }
+    if ('address' in nextLead && nextLead.address !== currentLead.address) {
+      historyParts.push(`Address updated`)
+    }
+    if ('departmentId' in nextLead && nextLead.departmentId !== currentLead.department.id) {
+      historyParts.push(`Department changed`)
+    }
+  }
+
+  if (nextLead.status !== currentLead.status) {
+    historyParts.push(`Status changed to ${nextLead.status.replaceAll('_', ' ')}`)
     action = 'STATUS_UPDATED'
   }
 
-  if (message !== (currentLead.message ?? '')) {
-    historyParts.push(message)
+  if (nextLead.message !== (currentLead.message ?? '')) {
+    historyParts.push(nextLead.message)
     action = action === 'STATUS_UPDATED' ? 'STATUS_AND_MESSAGE_UPDATED' : 'MESSAGE_UPDATED'
+  }
+
+  if (isAdmin(role) && historyParts.length > 0 && action === 'UPDATED') {
+    action = 'UPDATED'
   }
 
   return {
@@ -398,30 +463,52 @@ export async function updateLeadService(
     throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
   }
 
-  const normalizedPayload = normalizeLeadUpdatePayload(payload, lead)
+  const normalizedPayload = isAdmin(role)
+    ? normalizeLeadAdminUpdatePayload(payload, lead)
+    : normalizeLeadManagerUpdatePayload(payload, lead)
 
   if (!leadStatusValues.includes(normalizedPayload.status)) {
     throw new AppError('Invalid lead status', HTTP_STATUS.BAD_REQUEST)
   }
 
+  if (isAdmin(role) && normalizedPayload.departmentId) {
+    await ensureLeadDepartmentAccess(userId, role, normalizedPayload.departmentId)
+  }
+
   try {
     const updatedLead = await prisma.$transaction(async (transaction: Prisma.TransactionClient) => {
+      const data = isAdmin(role)
+        ? {
+            name: normalizedPayload.name,
+            fatherName: normalizedPayload.fatherName,
+            email: normalizedPayload.email,
+            phone: normalizedPayload.phone,
+            whatsapp: normalizedPayload.whatsapp,
+            city: normalizedPayload.city,
+            address: normalizedPayload.address,
+            message: normalizedPayload.message,
+            status: normalizedPayload.status,
+            departmentId: normalizedPayload.departmentId,
+            updatedById: userId,
+          }
+        : {
+            message: normalizedPayload.message,
+            status: normalizedPayload.status,
+            updatedById: userId,
+          }
+
       const leadRecord = await transaction.lead.update({
         where: {
           id: leadId,
         },
-        data: {
-          message: normalizedPayload.message,
-          status: normalizedPayload.status,
-          updatedById: userId,
-        },
+        data,
         select: LEAD_SELECT,
       })
 
       const historyEntry = buildLeadHistoryEntry(
         lead,
-        normalizedPayload.status,
-        normalizedPayload.message,
+        normalizedPayload,
+        role,
       )
 
       await createLeadActivity(
