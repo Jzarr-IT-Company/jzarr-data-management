@@ -1,0 +1,8 @@
+node_modules
+dist
+.env
+prisma/dev.sqlite
+coverage
+env.*
+logs/
+reports/
