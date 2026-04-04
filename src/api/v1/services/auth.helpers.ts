@@ -1,4 +1,4 @@
-import { env } from '../../../config/env.js'
+import { env } from '../../../config/loadEnv.js'
 import { prisma } from '../../../lib/prisma.js'
 import { generateRefreshToken, hashToken, signAccessToken } from '../../../utils/auth.js'
 

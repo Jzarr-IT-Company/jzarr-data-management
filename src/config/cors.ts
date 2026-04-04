@@ -1,4 +1,4 @@
-import { env } from './env.js'
+import { env } from './loadEnv.js'
 
 export function parseCorsOrigins(value: string) {
   return value
