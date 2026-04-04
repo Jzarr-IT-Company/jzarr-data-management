@@ -65,6 +65,19 @@ type LeadCreatePayload = {
   updatedById: string
 }
 
+type NormalizedLeadUpdatePayload = {
+  name?: string
+  fatherName?: string | null
+  email?: string | null
+  phone?: string
+  whatsapp?: string | null
+  city?: string | null
+  address?: string | null
+  departmentId?: string
+  status: LeadStatusValue
+  message: string
+}
+
 const LEAD_SELECT = {
   id: true,
   referenceNo: true,
@@ -290,7 +303,7 @@ function normalizeLeadCreatePayload(payload: LeadPayload) {
   }
 }
 
-function normalizeLeadAdminUpdatePayload(payload: UpdateLeadPayload, currentLead: LeadRecord) {
+function normalizeLeadAdminUpdatePayload(payload: UpdateLeadPayload, currentLead: LeadRecord): NormalizedLeadUpdatePayload {
   return {
     name: normalizeRequiredText(payload.name ?? currentLead.name),
     fatherName:
@@ -312,7 +325,7 @@ function normalizeLeadAdminUpdatePayload(payload: UpdateLeadPayload, currentLead
   }
 }
 
-function normalizeLeadManagerUpdatePayload(payload: UpdateLeadPayload, currentLead: LeadRecord) {
+function normalizeLeadManagerUpdatePayload(payload: UpdateLeadPayload, currentLead: LeadRecord): NormalizedLeadUpdatePayload {
   return {
     status: payload.status ?? currentLead.status,
     message: normalizeRequiredText(payload.message),
@@ -321,7 +334,7 @@ function normalizeLeadManagerUpdatePayload(payload: UpdateLeadPayload, currentLe
 
 function buildLeadHistoryEntry(
   currentLead: LeadRecord,
-  nextLead: ReturnType<typeof normalizeLeadAdminUpdatePayload> | ReturnType<typeof normalizeLeadManagerUpdatePayload>,
+  nextLead: NormalizedLeadUpdatePayload,
   role?: CurrentUserRole,
 ) {
   const historyParts: string[] = []
