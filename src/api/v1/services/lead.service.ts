@@ -37,8 +37,9 @@ type LeadPayload = {
   departmentId: string
 }
 
-type UpdateLeadPayload = Partial<LeadPayload> & {
+type UpdateLeadPayload = {
   status?: LeadStatusValue
+  message?: string | null
 }
 
 type LeadCreatePayload = {
@@ -88,6 +89,23 @@ const LEAD_SELECT = {
     select: {
       id: true,
       name: true,
+    },
+  },
+  activities: {
+    orderBy: {
+      createdAt: 'desc',
+    },
+    select: {
+      id: true,
+      action: true,
+      note: true,
+      createdAt: true,
+      user: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
     },
   },
 } as const
@@ -266,18 +284,28 @@ function normalizeLeadCreatePayload(payload: LeadPayload) {
 
 function normalizeLeadUpdatePayload(payload: UpdateLeadPayload, currentLead: LeadRecord) {
   return {
-    ...(payload.name !== undefined ? { name: normalizeRequiredText(payload.name) } : {}),
-    ...(payload.fatherName !== undefined
-      ? { fatherName: normalizeOptionalText(payload.fatherName) }
-      : {}),
-    ...(payload.email !== undefined ? { email: normalizeOptionalText(payload.email) } : {}),
-    ...(payload.phone !== undefined ? { phone: normalizeLeadPhone(payload.phone) } : {}),
-    ...(payload.whatsapp !== undefined ? { whatsapp: normalizeOptionalText(payload.whatsapp) } : {}),
-    ...(payload.city !== undefined ? { city: normalizeOptionalText(payload.city) } : {}),
-    ...(payload.address !== undefined ? { address: normalizeOptionalText(payload.address) } : {}),
-    ...(payload.message !== undefined ? { message: normalizeOptionalText(payload.message) } : {}),
     status: payload.status ?? currentLead.status,
-    departmentId: payload.departmentId ?? currentLead.department.id,
+    message: normalizeRequiredText(payload.message ?? currentLead.message ?? ''),
+  }
+}
+
+function buildLeadHistoryEntry(currentLead: LeadRecord, nextStatus: LeadStatusValue, message: string) {
+  const historyParts: string[] = []
+  let action = 'UPDATED'
+
+  if (nextStatus !== currentLead.status) {
+    historyParts.push(`Status changed to ${nextStatus.replaceAll('_', ' ')}`)
+    action = 'STATUS_UPDATED'
+  }
+
+  if (message !== (currentLead.message ?? '')) {
+    historyParts.push(message)
+    action = action === 'STATUS_UPDATED' ? 'STATUS_AND_MESSAGE_UPDATED' : 'MESSAGE_UPDATED'
+  }
+
+  return {
+    action,
+    note: historyParts.length > 0 ? historyParts.join('\n\n') : 'Lead updated',
   }
 }
 
@@ -376,8 +404,6 @@ export async function updateLeadService(
     throw new AppError('Invalid lead status', HTTP_STATUS.BAD_REQUEST)
   }
 
-  await ensureLeadDepartmentAccess(userId, role, normalizedPayload.departmentId)
-
   try {
     const updatedLead = await prisma.$transaction(async (transaction: Prisma.TransactionClient) => {
       const leadRecord = await transaction.lead.update({
@@ -385,22 +411,26 @@ export async function updateLeadService(
           id: leadId,
         },
         data: {
-          name: normalizedPayload.name,
-          fatherName: normalizedPayload.fatherName,
-          email: normalizedPayload.email,
-          phone: normalizedPayload.phone,
-          whatsapp: normalizedPayload.whatsapp,
-          city: normalizedPayload.city,
-          address: normalizedPayload.address,
           message: normalizedPayload.message,
           status: normalizedPayload.status,
-          departmentId: normalizedPayload.departmentId,
           updatedById: userId,
         },
         select: LEAD_SELECT,
       })
 
-      await createLeadActivity(transaction, leadRecord.id, userId, 'UPDATED', 'Lead details updated')
+      const historyEntry = buildLeadHistoryEntry(
+        lead,
+        normalizedPayload.status,
+        normalizedPayload.message,
+      )
+
+      await createLeadActivity(
+        transaction,
+        leadRecord.id,
+        userId,
+        historyEntry.action,
+        historyEntry.note,
+      )
 
       return leadRecord
     })

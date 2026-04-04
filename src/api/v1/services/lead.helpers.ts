@@ -14,6 +14,14 @@ type PersonSummary = {
   name: string
 }
 
+export type LeadActivityRecord = {
+  id: string
+  action: string
+  note: string | null
+  createdAt: Date
+  user: PersonSummary | null
+}
+
 export type LeadRecord = {
   id: string
   referenceNo: string
@@ -31,6 +39,7 @@ export type LeadRecord = {
   department: DepartmentSummary
   createdBy: PersonSummary | null
   updatedBy: PersonSummary | null
+  activities?: LeadActivityRecord[]
 }
 
 export type LeadDetailRecord = LeadRecord
@@ -52,6 +61,7 @@ export type SafeLead = {
   department: DepartmentSummary
   createdBy: PersonSummary | null
   updatedBy: PersonSummary | null
+  activities: LeadActivityRecord[]
 }
 
 export function toSafeLead(lead: LeadRecord): SafeLead {
@@ -72,6 +82,7 @@ export function toSafeLead(lead: LeadRecord): SafeLead {
     department,
     createdBy,
     updatedBy,
+    activities = [],
   } = lead
 
   return {
@@ -91,6 +102,7 @@ export function toSafeLead(lead: LeadRecord): SafeLead {
     department,
     createdBy,
     updatedBy,
+    activities,
   }
 }
 
