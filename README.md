@@ -17,11 +17,11 @@ MySQL + Prisma + Express backend for the Jzarr Data Management system.
 1. Create a Render **Web Service** from this repository.
 2. Set the build command to:
    ```bash
-   npm install && npm run prisma:generate:deploy && npm run build
+   npm install --include=dev && npm run prisma:generate:deploy
    ```
 3. Set the start command to:
    ```bash
-   npm start
+   npm run start:render
    ```
 4. Add these environment variables on Render:
    - `NODE_ENV=production`
