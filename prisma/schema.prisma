@@ -38,6 +38,10 @@ model User {
   managedDepartments    Department[] @relation("ManagedDepartments")
   createdLeads          Lead[]    @relation("CreatedLeads")
   updatedLeads          Lead[]    @relation("UpdatedLeads")
+  createdStores         Store[]   @relation("CreatedStores")
+  updatedStores         Store[]   @relation("UpdatedStores")
+  createdStoreStats     StoreStat[] @relation("CreatedStoreStats")
+  updatedStoreStats     StoreStat[] @relation("UpdatedStoreStats")
   leadActivities        LeadActivity[]
   refreshTokens         RefreshToken[]
 }
@@ -52,6 +56,7 @@ model Department {
   updatedAt   DateTime  @updatedAt
   managers    User[]    @relation("ManagedDepartments")
   leads       Lead[]
+  stores      Store[]
 }
 
 model Lead {
@@ -90,6 +95,46 @@ model LeadActivity {
   user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([leadId, createdAt])
+}
+
+model Store {
+  id            String      @id @default(cuid())
+  departmentId   String
+  name          String
+  url           String
+  isActive      Boolean     @default(true)
+  createdById   String?
+  updatedById   String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  department    Department  @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  createdBy     User?       @relation("CreatedStores", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy     User?       @relation("UpdatedStores", fields: [updatedById], references: [id], onDelete: SetNull)
+  stats         StoreStat[]
+
+  @@unique([departmentId, name])
+  @@unique([departmentId, url])
+  @@index([departmentId, isActive])
+}
+
+model StoreStat {
+  id            String      @id @default(cuid())
+  storeId       String
+  statDate      DateTime
+  views         Int         @default(0)
+  visitors      Int         @default(0)
+  orders        Int         @default(0)
+  revenue       Decimal     @default(0)
+  createdById   String?
+  updatedById   String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  store         Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdBy     User?       @relation("CreatedStoreStats", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy     User?       @relation("UpdatedStoreStats", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([storeId, statDate])
+  @@index([storeId, statDate])
 }
 
 model RefreshToken {
