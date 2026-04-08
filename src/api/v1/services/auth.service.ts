@@ -1,5 +1,5 @@
 import { prisma } from '../../../lib/prisma.js'
-import { comparePassword } from '../../../utils/auth.js'
+import { comparePassword, hashPassword } from '../../../utils/auth.js'
 import {
   createAccessToken,
   createRefreshTokenRecordData,
@@ -103,4 +103,49 @@ export async function logoutService(refreshToken: string) {
   })
 
   return true
+}
+
+export async function changeCurrentUserPasswordService(
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: AUTH_USER_INCLUDE,
+  })
+
+  if (!user || !isActiveUser(user)) {
+    return null
+  }
+
+  const isCurrentPasswordValid = await comparePassword(currentPassword, user.passwordHash)
+
+  if (!isCurrentPasswordValid) {
+    return 'INVALID_CURRENT_PASSWORD' as const
+  }
+
+  const passwordHash = await hashPassword(newPassword)
+
+  await prisma.$transaction([
+    prisma.user.update({
+      where: {
+        id: userId,
+      },
+      data: {
+        passwordHash,
+      },
+    }),
+    prisma.refreshToken.updateMany({
+      where: {
+        userId,
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: new Date(),
+      },
+    }),
+  ])
+
+  return toSafeUser(user)
 }

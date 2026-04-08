@@ -3,13 +3,14 @@ import crypto from 'node:crypto'
 import jwt from 'jsonwebtoken'
 
 import { env } from '../config/loadEnv.js'
-import type { UserRole } from '@prisma/client'
+import type { UserRole } from '../types/user-role.js'
 
 export type AuthTokenPayload = {
   id: string
   email: string
   role: UserRole
   name: string
+  allowedScreens?: string[]
 }
 
 export async function hashPassword(password: string) {

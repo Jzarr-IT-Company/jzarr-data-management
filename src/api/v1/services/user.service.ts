@@ -5,8 +5,11 @@ import { AppError } from '../../../utils/app-error.js'
 import {
   isPrismaUniqueConstraintError,
   normalizeDepartmentIds,
+  toSafeSubAdmin,
   toSafeManager,
   type ManagerRecord,
+  type SubAdminRecord,
+  SUB_ADMIN_SCREEN_OPTIONS,
 } from './user.helpers.js'
 
 type ManagerDepartmentPayload = {
@@ -19,13 +22,38 @@ type ManagerDepartmentPayload = {
   departmentIds: string[]
 }
 
+type SubAdminPayload = ManagerDepartmentPayload & {
+  allowedScreens: string[]
+}
+
 type UpdateManagerPayload = Partial<Omit<ManagerDepartmentPayload, 'password' | 'departmentIds'>> & {
   departmentIds?: string[]
+}
+
+type UpdateSubAdminPayload = Partial<
+  Omit<SubAdminPayload, 'password' | 'departmentIds' | 'allowedScreens'>
+> & {
+  departmentIds?: string[]
+  allowedScreens?: string[]
 }
 
 const MANAGER_INCLUDE = {
   managedDepartments: true,
 } as const
+
+const SUB_ADMIN_INCLUDE = {
+  managedDepartments: true,
+} as const
+
+function normalizeScreens(screens: string[]) {
+  return Array.from(
+    new Set(
+      screens
+        .map((screen) => screen.trim())
+        .filter((screen) => SUB_ADMIN_SCREEN_OPTIONS.includes(screen as (typeof SUB_ADMIN_SCREEN_OPTIONS)[number])),
+    ),
+  ) as (typeof SUB_ADMIN_SCREEN_OPTIONS)[number][]
+}
 
 async function ensureActiveDepartments(departmentIds: string[]) {
   const departments = await prisma.department.findMany({
@@ -71,6 +99,226 @@ export async function listManagersService() {
   })
 
   return buildSafeManagerList(managers as ManagerRecord[])
+}
+
+function buildSafeSubAdminList(subAdmins: SubAdminRecord[]) {
+  return subAdmins.map((subAdmin) => toSafeSubAdmin(subAdmin))
+}
+
+async function findSubAdminById(subAdminId: string) {
+  return prisma.user.findFirst({
+    where: {
+      id: subAdminId,
+      role: 'SUB_ADMIN',
+    },
+    include: SUB_ADMIN_INCLUDE,
+  })
+}
+
+export async function listSubAdminsService() {
+  const subAdmins = await prisma.user.findMany({
+    where: {
+      role: 'SUB_ADMIN',
+    },
+    include: SUB_ADMIN_INCLUDE,
+    orderBy: {
+      createdAt: 'desc',
+    },
+  })
+
+  return buildSafeSubAdminList(subAdmins as SubAdminRecord[])
+}
+
+export async function createSubAdminService(payload: SubAdminPayload) {
+  const departmentIds = normalizeDepartmentIds(payload.departmentIds)
+
+  if (!departmentIds.length) {
+    throw new AppError('At least one department is required', HTTP_STATUS.BAD_REQUEST)
+  }
+
+  const allowedScreens = normalizeScreens(payload.allowedScreens)
+
+  if (!allowedScreens.length) {
+    throw new AppError('At least one screen is required', HTTP_STATUS.BAD_REQUEST)
+  }
+
+  await ensureActiveDepartments(departmentIds)
+
+  const passwordHash = await hashPassword(payload.password)
+
+  try {
+    const subAdmin = await prisma.user.create({
+      data: {
+        name: payload.name.trim(),
+        email: payload.email.trim().toLowerCase(),
+        passwordHash,
+        role: 'SUB_ADMIN',
+        status: payload.status ?? 'ACTIVE',
+        phone: payload.phone?.trim() || undefined,
+        designation: payload.designation?.trim() || undefined,
+        allowedScreens,
+        managedDepartments: {
+          connect: departmentIds.map((departmentId) => ({ id: departmentId })),
+        },
+      },
+      include: SUB_ADMIN_INCLUDE,
+    })
+
+    return toSafeSubAdmin(subAdmin as SubAdminRecord)
+  } catch (error) {
+    if (isPrismaUniqueConstraintError(error)) {
+      throw new AppError(
+        'A sub admin with this email or phone already exists',
+        HTTP_STATUS.CONFLICT
+      )
+    }
+
+    throw error
+  }
+}
+
+export async function getSubAdminService(subAdminId: string) {
+  const subAdmin = await findSubAdminById(subAdminId)
+
+  if (!subAdmin) {
+    return null
+  }
+
+  return toSafeSubAdmin(subAdmin as SubAdminRecord)
+}
+
+export async function updateSubAdminService(subAdminId: string, payload: UpdateSubAdminPayload) {
+  const existingSubAdmin = await findSubAdminById(subAdminId)
+
+  if (!existingSubAdmin) {
+    return null
+  }
+
+  const departmentIds =
+    payload.departmentIds === undefined ? undefined : normalizeDepartmentIds(payload.departmentIds)
+  const allowedScreens =
+    payload.allowedScreens === undefined ? undefined : normalizeScreens(payload.allowedScreens)
+
+  if (departmentIds !== undefined) {
+    if (!departmentIds.length) {
+      throw new AppError('At least one department is required', HTTP_STATUS.BAD_REQUEST)
+    }
+
+    await ensureActiveDepartments(departmentIds)
+  }
+
+  if (allowedScreens !== undefined && !allowedScreens.length) {
+    throw new AppError('At least one screen is required', HTTP_STATUS.BAD_REQUEST)
+  }
+
+  const updateData = {
+    ...(payload.name !== undefined ? { name: payload.name.trim() } : {}),
+    ...(payload.email !== undefined ? { email: payload.email.trim().toLowerCase() } : {}),
+    ...(payload.phone !== undefined
+      ? { phone: payload.phone?.trim() ? payload.phone.trim() : null }
+      : {}),
+    ...(payload.designation !== undefined
+      ? { designation: payload.designation?.trim() ? payload.designation.trim() : null }
+      : {}),
+    ...(payload.status !== undefined ? { status: payload.status } : {}),
+    ...(allowedScreens !== undefined ? { allowedScreens } : {}),
+    ...(departmentIds !== undefined
+      ? {
+          managedDepartments: {
+            set: departmentIds.map((departmentId) => ({ id: departmentId })),
+          },
+        }
+      : {}),
+  }
+
+  try {
+    const subAdmin = await prisma.user.update({
+      where: {
+        id: subAdminId,
+      },
+      data: updateData,
+      include: SUB_ADMIN_INCLUDE,
+    })
+
+    return toSafeSubAdmin(subAdmin as SubAdminRecord)
+  } catch (error) {
+    if (isPrismaUniqueConstraintError(error)) {
+      throw new AppError(
+        'A sub admin with this email or phone already exists',
+        HTTP_STATUS.CONFLICT
+      )
+    }
+
+    throw error
+  }
+}
+
+export async function updateSubAdminStatusService(
+  subAdminId: string,
+  status: SubAdminPayload['status']
+) {
+  if (!status) {
+    throw new AppError('Status is required', HTTP_STATUS.BAD_REQUEST)
+  }
+
+  return updateSubAdminService(subAdminId, { status })
+}
+
+export async function resetSubAdminPasswordService(subAdminId: string, password: string) {
+  const subAdmin = await findSubAdminById(subAdminId)
+
+  if (!subAdmin) {
+    return null
+  }
+
+  const passwordHash = await hashPassword(password)
+
+  await prisma.user.update({
+    where: {
+      id: subAdminId,
+    },
+    data: {
+      passwordHash,
+    },
+  })
+
+  return toSafeSubAdmin(subAdmin as SubAdminRecord)
+}
+
+export async function deleteSubAdminService(subAdminId: string) {
+  const subAdmin = await findSubAdminById(subAdminId)
+
+  if (!subAdmin) {
+    return null
+  }
+
+  const leadCount = await prisma.lead.count({
+    where: {
+      OR: [
+        {
+          createdById: subAdminId,
+        },
+        {
+          updatedById: subAdminId,
+        },
+      ],
+    },
+  })
+
+  if (leadCount > 0) {
+    throw new AppError(
+      'Sub admin has linked leads and cannot be deleted. Deactivate the account instead.',
+      HTTP_STATUS.CONFLICT
+    )
+  }
+
+  await prisma.user.delete({
+    where: {
+      id: subAdminId,
+    },
+  })
+
+  return true
 }
 
 export async function createManagerService(payload: ManagerDepartmentPayload) {

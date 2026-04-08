@@ -1,6 +1,7 @@
 import { Router } from 'express'
 
 import { authMiddleware } from '../middleware/auth.middleware.js'
+import { requireScreenAccess } from '../middleware/screen.middleware.js'
 import { requireRoles } from '../middleware/role.middleware.js'
 import { validationMiddleware } from '../middleware/validation.middleware.js'
 import {
@@ -23,22 +24,42 @@ import {
 
 export const storesRouter = Router()
 
-storesRouter.use(authMiddleware, requireRoles('ADMIN', 'MANAGER'))
+storesRouter.use(authMiddleware, requireRoles('ADMIN', 'MANAGER', 'SUB_ADMIN'))
 
-storesRouter.get('/', listStoresController)
-storesRouter.post('/', validationMiddleware(createStoreSchema), createStoreController)
-storesRouter.get('/:storeId/report', getStoreReportController)
-storesRouter.get('/:storeId/report/export', exportStoreReportController)
-storesRouter.get('/:storeId', getStoreController)
-storesRouter.patch('/:storeId', validationMiddleware(updateStoreSchema), updateStoreController)
+storesRouter.get('/', requireScreenAccess('departments', ['ADMIN', 'MANAGER']), listStoresController)
+storesRouter.post(
+  '/',
+  requireScreenAccess('departments', ['ADMIN', 'MANAGER']),
+  validationMiddleware(createStoreSchema),
+  createStoreController
+)
+storesRouter.get(
+  '/:storeId/report',
+  requireScreenAccess('departments', ['ADMIN', 'MANAGER']),
+  getStoreReportController
+)
+storesRouter.get(
+  '/:storeId/report/export',
+  requireScreenAccess('departments', ['ADMIN', 'MANAGER']),
+  exportStoreReportController
+)
+storesRouter.get('/:storeId', requireScreenAccess('departments', ['ADMIN', 'MANAGER']), getStoreController)
+storesRouter.patch(
+  '/:storeId',
+  requireScreenAccess('departments', ['ADMIN', 'MANAGER']),
+  validationMiddleware(updateStoreSchema),
+  updateStoreController
+)
 storesRouter.patch(
   '/:storeId/status',
+  requireScreenAccess('departments', ['ADMIN', 'MANAGER']),
   validationMiddleware(updateStoreStatusSchema),
   updateStoreStatusController,
 )
 storesRouter.post(
   '/:storeId/stats',
+  requireScreenAccess('departments', ['ADMIN', 'MANAGER']),
   validationMiddleware(upsertStoreStatSchema),
   upsertStoreStatController,
 )
-storesRouter.delete('/:storeId', deleteStoreController)
+storesRouter.delete('/:storeId', requireScreenAccess('departments', ['ADMIN', 'MANAGER']), deleteStoreController)

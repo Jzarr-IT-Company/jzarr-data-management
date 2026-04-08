@@ -12,7 +12,7 @@ import {
   type ReportQuery,
 } from './report.helpers.js'
 
-type CurrentUserRole = 'ADMIN' | 'MANAGER'
+type CurrentUserRole = 'ADMIN' | 'MANAGER' | 'SUB_ADMIN'
 
 type ReportLeadRow = LeadRecord
 

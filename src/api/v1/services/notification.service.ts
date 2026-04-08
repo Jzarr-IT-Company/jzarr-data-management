@@ -2,7 +2,7 @@ import { HTTP_STATUS } from '../../../constant/index.js'
 import { prisma } from '../../../lib/prisma.js'
 import { AppError } from '../../../utils/app-error.js'
 
-type CurrentUserRole = 'ADMIN' | 'MANAGER'
+type CurrentUserRole = 'ADMIN' | 'MANAGER' | 'SUB_ADMIN'
 
 type NotificationListItem = {
   id: string

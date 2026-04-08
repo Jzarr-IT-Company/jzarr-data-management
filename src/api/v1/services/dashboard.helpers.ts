@@ -1,6 +1,6 @@
 import { prisma } from '../../../lib/prisma.js'
 
-type CurrentUserRole = 'ADMIN' | 'MANAGER'
+type CurrentUserRole = 'ADMIN' | 'MANAGER' | 'SUB_ADMIN'
 
 export async function getAccessibleDepartmentIds(userId: string, role?: CurrentUserRole) {
   if (role === 'ADMIN') {

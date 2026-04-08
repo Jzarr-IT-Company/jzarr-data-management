@@ -20,7 +20,7 @@ import {
   type TaskStatusValue,
 } from './task.helpers.js'
 
-type CurrentUserRole = 'ADMIN' | 'MANAGER'
+type CurrentUserRole = 'ADMIN' | 'MANAGER' | 'SUB_ADMIN'
 
 type TaskListQuery = {
   search?: string

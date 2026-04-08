@@ -1,4 +1,4 @@
-import type { UserRole } from '@prisma/client'
+import type { UserRole } from './user-role.js'
 
 declare global {
   namespace Express {
@@ -8,6 +8,7 @@ declare global {
         role: UserRole
         email: string
         name: string
+        allowedScreens?: string[]
       }
     }
   }

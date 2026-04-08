@@ -10,7 +10,7 @@ import {
 
 export const notificationRouter = Router()
 
-notificationRouter.use(authMiddleware, requireRoles('ADMIN', 'MANAGER'))
+notificationRouter.use(authMiddleware, requireRoles('ADMIN', 'MANAGER', 'SUB_ADMIN'))
 
 notificationRouter.get('/', listNotificationsController)
 notificationRouter.patch('/read-all', markAllNotificationsReadController)

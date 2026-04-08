@@ -7,7 +7,7 @@ import {
   isAdminRole,
 } from './dashboard.helpers.js'
 
-type CurrentUserRole = 'ADMIN' | 'MANAGER'
+type CurrentUserRole = 'ADMIN' | 'MANAGER' | 'SUB_ADMIN'
 
 const LEAD_STATUSES = ['NEW', 'IN_PROGRESS', 'CONVERTED', 'NOT_INTERESTED'] as const
 

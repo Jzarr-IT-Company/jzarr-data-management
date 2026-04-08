@@ -1,7 +1,7 @@
 import { Router } from 'express'
 
 import { authMiddleware } from '../middleware/auth.middleware.js'
-import { requireRoles } from '../middleware/role.middleware.js'
+import { requireScreens } from '../middleware/screen.middleware.js'
 import { validationMiddleware } from '../middleware/validation.middleware.js'
 import {
   createDepartmentController,
@@ -25,20 +25,20 @@ departmentsRouter.get('/', listDepartmentsController)
 departmentsRouter.get('/:departmentId', getDepartmentController)
 departmentsRouter.post(
   '/',
-  requireRoles('ADMIN'),
+  requireScreens('department-setup'),
   validationMiddleware(createDepartmentSchema),
   createDepartmentController
 )
 departmentsRouter.patch(
   '/:departmentId',
-  requireRoles('ADMIN'),
+  requireScreens('department-setup'),
   validationMiddleware(updateDepartmentSchema),
   updateDepartmentController
 )
 departmentsRouter.patch(
   '/:departmentId/status',
-  requireRoles('ADMIN'),
+  requireScreens('department-setup'),
   validationMiddleware(updateDepartmentStatusSchema),
   updateDepartmentStatusController
 )
-departmentsRouter.delete('/:departmentId', requireRoles('ADMIN'), deleteDepartmentController)
+departmentsRouter.delete('/:departmentId', requireScreens('department-setup'), deleteDepartmentController)

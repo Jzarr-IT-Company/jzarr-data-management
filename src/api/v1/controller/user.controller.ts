@@ -3,12 +3,19 @@ import type { Request, Response } from 'express'
 import { HTTP_STATUS, errorResponse, successResponse } from '../../../constant/index.js'
 import {
   createManagerService,
+  createSubAdminService,
   deleteManagerService,
+  deleteSubAdminService,
   getManagerService,
+  getSubAdminService,
   listManagersService,
+  listSubAdminsService,
   resetManagerPasswordService,
+  resetSubAdminPasswordService,
   updateManagerService,
   updateManagerStatusService,
+  updateSubAdminService,
+  updateSubAdminStatusService,
 } from '../services/user.service.js'
 
 function getManagerIdParam(req: Request) {
@@ -135,4 +142,120 @@ export async function deleteManagerController(req: Request, res: Response) {
   }
 
   return res.status(HTTP_STATUS.OK).json(successResponse('Manager deleted'))
+}
+
+export async function listSubAdminsController(_req: Request, res: Response) {
+  const subAdmins = await listSubAdminsService()
+
+  return res.status(HTTP_STATUS.OK).json(successResponse('Sub admins fetched', subAdmins))
+}
+
+export async function createSubAdminController(req: Request, res: Response) {
+  const result = await createSubAdminService(req.body)
+
+  return res.status(HTTP_STATUS.CREATED).json(successResponse('Sub admin created', result))
+}
+
+export async function getSubAdminController(req: Request, res: Response) {
+  const subAdminId = getManagerIdParam(req)
+
+  if (!subAdminId) {
+    return res
+      .status(HTTP_STATUS.BAD_REQUEST)
+      .json(errorResponse('Sub admin id is required', HTTP_STATUS.BAD_REQUEST))
+  }
+
+  const subAdmin = await getSubAdminService(subAdminId)
+
+  if (!subAdmin) {
+    return res
+      .status(HTTP_STATUS.NOT_FOUND)
+      .json(errorResponse('Sub admin not found', HTTP_STATUS.NOT_FOUND))
+  }
+
+  return res.status(HTTP_STATUS.OK).json(successResponse('Sub admin fetched', subAdmin))
+}
+
+export async function updateSubAdminController(req: Request, res: Response) {
+  const subAdminId = getManagerIdParam(req)
+
+  if (!subAdminId) {
+    return res
+      .status(HTTP_STATUS.BAD_REQUEST)
+      .json(errorResponse('Sub admin id is required', HTTP_STATUS.BAD_REQUEST))
+  }
+
+  const subAdmin = await updateSubAdminService(subAdminId, req.body)
+
+  if (!subAdmin) {
+    return res
+      .status(HTTP_STATUS.NOT_FOUND)
+      .json(errorResponse('Sub admin not found', HTTP_STATUS.NOT_FOUND))
+  }
+
+  return res.status(HTTP_STATUS.OK).json(successResponse('Sub admin updated', subAdmin))
+}
+
+export async function updateSubAdminStatusController(req: Request, res: Response) {
+  const subAdminId = getManagerIdParam(req)
+
+  if (!subAdminId) {
+    return res
+      .status(HTTP_STATUS.BAD_REQUEST)
+      .json(errorResponse('Sub admin id is required', HTTP_STATUS.BAD_REQUEST))
+  }
+
+  const { status } = req.body as { status: 'ACTIVE' | 'INACTIVE' }
+  const subAdmin = await updateSubAdminStatusService(subAdminId, status)
+
+  if (!subAdmin) {
+    return res
+      .status(HTTP_STATUS.NOT_FOUND)
+      .json(errorResponse('Sub admin not found', HTTP_STATUS.NOT_FOUND))
+  }
+
+  return res.status(HTTP_STATUS.OK).json(successResponse('Sub admin status updated', subAdmin))
+}
+
+export async function resetSubAdminPasswordController(req: Request, res: Response) {
+  const subAdminId = getManagerIdParam(req)
+
+  if (!subAdminId) {
+    return res
+      .status(HTTP_STATUS.BAD_REQUEST)
+      .json(errorResponse('Sub admin id is required', HTTP_STATUS.BAD_REQUEST))
+  }
+
+  const { password } = req.body as { password: string }
+  const subAdmin = await resetSubAdminPasswordService(subAdminId, password)
+
+  if (!subAdmin) {
+    return res
+      .status(HTTP_STATUS.NOT_FOUND)
+      .json(errorResponse('Sub admin not found', HTTP_STATUS.NOT_FOUND))
+  }
+
+  return res
+    .status(HTTP_STATUS.OK)
+    .json(successResponse('Sub admin password reset successfully', subAdmin))
+}
+
+export async function deleteSubAdminController(req: Request, res: Response) {
+  const subAdminId = getManagerIdParam(req)
+
+  if (!subAdminId) {
+    return res
+      .status(HTTP_STATUS.BAD_REQUEST)
+      .json(errorResponse('Sub admin id is required', HTTP_STATUS.BAD_REQUEST))
+  }
+
+  const deleted = await deleteSubAdminService(subAdminId)
+
+  if (!deleted) {
+    return res
+      .status(HTTP_STATUS.NOT_FOUND)
+      .json(errorResponse('Sub admin not found', HTTP_STATUS.NOT_FOUND))
+  }
+
+  return res.status(HTTP_STATUS.OK).json(successResponse('Sub admin deleted'))
 }

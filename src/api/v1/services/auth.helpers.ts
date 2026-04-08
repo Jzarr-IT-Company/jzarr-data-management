@@ -20,6 +20,7 @@ type DepartmentSummary = {
 
 type PrismaUserWithDepartments = PrismaUser & {
   managedDepartments?: DepartmentSummary[]
+  allowedScreens?: unknown
 }
 
 export type SafeUser = Pick<
@@ -27,6 +28,17 @@ export type SafeUser = Pick<
   'id' | 'name' | 'email' | 'role' | 'status' | 'designation'
 > & {
   departments: DepartmentSummary[]
+  allowedScreens: string[]
+}
+
+function normalizeAllowedScreens(value: unknown) {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((item) => String(item || '').trim())
+    .filter((item) => item.length > 0)
 }
 
 export function toSafeUser(user: PrismaUserWithDepartments): SafeUser {
@@ -40,6 +52,7 @@ export function toSafeUser(user: PrismaUserWithDepartments): SafeUser {
     status,
     designation,
     departments: user.managedDepartments || [],
+    allowedScreens: normalizeAllowedScreens(user.allowedScreens),
   }
 }
 
@@ -53,6 +66,7 @@ export function createAccessToken(user: PrismaUser) {
     email: user.email,
     role: user.role,
     name: user.name,
+    allowedScreens: normalizeAllowedScreens((user as PrismaUserWithDepartments).allowedScreens),
   })
 }
 

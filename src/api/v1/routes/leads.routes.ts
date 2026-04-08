@@ -1,6 +1,7 @@
 import { Router, text } from 'express'
 
 import { authMiddleware } from '../middleware/auth.middleware.js'
+import { requireScreenAccess } from '../middleware/screen.middleware.js'
 import { requireRoles } from '../middleware/role.middleware.js'
 import { validationMiddleware } from '../middleware/validation.middleware.js'
 import {
@@ -18,16 +19,31 @@ import { createLeadSchema, updateLeadSchema } from '../validator/lead.validator.
 
 export const leadsRouter = Router()
 
-leadsRouter.use(authMiddleware, requireRoles('ADMIN', 'MANAGER'))
+leadsRouter.use(authMiddleware, requireRoles('ADMIN', 'MANAGER', 'SUB_ADMIN'))
 
-leadsRouter.get('/', listLeadsController)
-leadsRouter.get('/export', exportLeadsController)
+leadsRouter.get('/', requireScreenAccess('departments', ['ADMIN', 'MANAGER']), listLeadsController)
+leadsRouter.get('/export', requireScreenAccess('import-export', ['ADMIN', 'MANAGER']), exportLeadsController)
 leadsRouter.post(
   '/import',
+  requireScreenAccess('import-export', ['ADMIN', 'MANAGER']),
   text({ type: ['text/csv', 'text/plain', 'application/csv'] }),
   importLeadsController
 )
-leadsRouter.get('/:leadId', getLeadController)
-leadsRouter.post('/', validationMiddleware(createLeadSchema), createLeadController)
-leadsRouter.patch('/:leadId', validationMiddleware(updateLeadSchema), updateLeadController)
-leadsRouter.delete('/:leadId', deleteLeadController)
+leadsRouter.get('/:leadId', requireScreenAccess('departments', ['ADMIN', 'MANAGER']), getLeadController)
+leadsRouter.post(
+  '/',
+  requireScreenAccess('departments', ['ADMIN', 'MANAGER']),
+  validationMiddleware(createLeadSchema),
+  createLeadController
+)
+leadsRouter.patch(
+  '/:leadId',
+  requireScreenAccess('departments', ['ADMIN', 'MANAGER']),
+  validationMiddleware(updateLeadSchema),
+  updateLeadController
+)
+leadsRouter.delete(
+  '/:leadId',
+  requireScreenAccess('departments', ['ADMIN', 'MANAGER']),
+  deleteLeadController
+)

@@ -10,6 +10,7 @@ datasource db {
 enum UserRole {
   ADMIN
   MANAGER
+  SUB_ADMIN
 }
 
 enum UserStatus {
@@ -47,6 +48,7 @@ model User {
   status               UserStatus @default(ACTIVE)
   phone                String?   @unique
   designation          String?
+  allowedScreens       Json?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
   managedDepartments    Department[] @relation("ManagedDepartments")

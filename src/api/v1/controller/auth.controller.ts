@@ -2,6 +2,7 @@ import type { Request, Response } from 'express'
 
 import { HTTP_STATUS, errorResponse, successResponse } from '../../../constant/index.js'
 import {
+  changeCurrentUserPasswordService,
   getCurrentUserService,
   loginService,
   logoutService,
@@ -65,4 +66,39 @@ export async function meController(req: Request, res: Response) {
   }
 
   return res.status(HTTP_STATUS.OK).json(successResponse('Current user fetched', user))
+}
+
+export async function changeCurrentUserPasswordController(req: Request, res: Response) {
+  const currentUserId = req.user?.id
+
+  if (!currentUserId) {
+    return res
+      .status(HTTP_STATUS.UNAUTHORIZED)
+      .json(errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED))
+  }
+
+  const { currentPassword, newPassword } = req.body as {
+    currentPassword: string
+    newPassword: string
+  }
+
+  const result = await changeCurrentUserPasswordService(
+    currentUserId,
+    currentPassword,
+    newPassword,
+  )
+
+  if (result === 'INVALID_CURRENT_PASSWORD') {
+    return res
+      .status(HTTP_STATUS.UNAUTHORIZED)
+      .json(errorResponse('Current password is incorrect', HTTP_STATUS.UNAUTHORIZED))
+  }
+
+  if (!result) {
+    return res
+      .status(HTTP_STATUS.NOT_FOUND)
+      .json(errorResponse('User not found', HTTP_STATUS.NOT_FOUND))
+  }
+
+  return res.status(HTTP_STATUS.OK).json(successResponse('Password updated successfully', result))
 }

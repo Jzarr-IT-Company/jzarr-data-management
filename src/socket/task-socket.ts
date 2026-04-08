@@ -1,10 +1,10 @@
 import type { Server as HttpServer } from 'node:http'
 
-import type { UserRole } from '@prisma/client'
 import { Server } from 'socket.io'
 
 import { corsConfig } from '../config/cors.js'
 import { verifyAccessToken } from '../utils/auth.js'
+import type { UserRole } from '../types/user-role.js'
 
 type TaskSocketEvent = {
   action: 'assigned' | 'status-updated' | 'deleted'
