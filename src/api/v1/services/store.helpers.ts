@@ -306,9 +306,27 @@ export function toStoreReportPayload(
   }
 }
 
+function getReportEntityLabel(store: SafeStore) {
+  const key = `${store.department.code || ''} ${store.department.name || ''}`.toLowerCase()
+
+  if (key.includes('blogging') || key.includes('bg01')) {
+    return 'Website'
+  }
+
+  return 'Store'
+}
+
+function formatUsdAmount(value: number) {
+  return `$${value.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
+}
+
 export function buildStoreReportCsv(payload: StoreReportPayload) {
+  const entityLabel = getReportEntityLabel(payload.store)
   const lines = [
-    ['Store', payload.store.name],
+    [entityLabel, payload.store.name],
     ['Department', payload.store.department.name],
     ['Range', payload.range],
     ['Generated At', new Date().toISOString()],
@@ -338,4 +356,158 @@ export function buildStoreReportCsv(payload: StoreReportPayload) {
         .join(','),
     )
     .join('\n')
+}
+
+type PdfFontName = 'F1' | 'F2'
+
+type PdfLine = {
+  text: string
+  x: number
+  y: number
+  size?: number
+  font?: PdfFontName
+}
+
+function escapePdfText(value: string) {
+  return String(value || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
+    .replace(/[^\x20-\x7E]/g, '?')
+}
+
+function buildPdfContent(lines: PdfLine[]) {
+  return lines
+    .map((line) => {
+      const font = line.font || 'F1'
+      const size = line.size || 11
+      return `BT\n/${font} ${size} Tf\n${line.x} ${line.y} Td\n(${escapePdfText(line.text)}) Tj\nET`
+    })
+    .join('\n')
+}
+
+function buildPdfDocument(content: string) {
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>',
+    `<< /Length ${Buffer.byteLength(content, 'utf8')} >>\nstream\n${content}\nendstream`,
+  ]
+
+  let output = '%PDF-1.4\n'
+  const offsets = ['0000000000 65535 f \n']
+
+  objects.forEach((object, index) => {
+    offsets.push(`${String(Buffer.byteLength(output, 'utf8')).padStart(10, '0')} 00000 n \n`)
+    output += `${index + 1} 0 obj\n${object}\nendobj\n`
+  })
+
+  const xrefOffset = Buffer.byteLength(output, 'utf8')
+  output += `xref\n0 ${objects.length + 1}\n`
+  output += offsets.join('')
+  output += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\n`
+  output += `startxref\n${xrefOffset}\n%%EOF`
+
+  return Buffer.from(output, 'utf8')
+}
+
+export function buildStoreReportPdf(payload: StoreReportPayload) {
+  const rows = payload.rows.slice(0, 24)
+  const lines: PdfLine[] = []
+  let y = 742
+  const entityLabel = getReportEntityLabel(payload.store)
+
+  const addLine = (text: string, options: Partial<PdfLine> = {}) => {
+    lines.push({
+      text,
+      x: options.x ?? 72,
+      y,
+      size: options.size ?? 11,
+      font: options.font ?? 'F1',
+    })
+    y -= options.size ? Math.max(14, options.size + 4) : 16
+  }
+
+  const drawRule = (currentY: number, x1 = 72, x2 = 540) => {
+    lines.push({
+      text: `__line__${x1}:${currentY}:${x2}`,
+      x: 0,
+      y: 0,
+      size: 0,
+      font: 'F1',
+    })
+  }
+
+  const fitText = (value: string, maxLength: number) => {
+    const text = String(value || '')
+
+    if (text.length <= maxLength) {
+      return text
+    }
+
+    return maxLength <= 3 ? text.slice(0, maxLength) : `${text.slice(0, maxLength - 3)}...`
+  }
+
+  addLine(`${entityLabel} Report`, { size: 18, font: 'F2' })
+  addLine(`${entityLabel}: ${payload.store.name}`)
+  addLine(`Department: ${payload.store.department.name}`)
+  addLine(`Range: ${payload.range}`)
+  addLine(`Generated At: ${new Date().toISOString()}`)
+
+  y -= 8
+  addLine('Summary', { size: 13, font: 'F2' })
+  addLine(`Total Views: ${payload.summary.totalViews}`)
+  addLine(`Total Visitors: ${payload.summary.totalVisitors}`)
+  addLine(`Total Orders: ${payload.summary.totalOrders}`)
+  addLine(`Total Revenue: ${formatUsdAmount(payload.summary.totalRevenue)}`)
+
+  y -= 10
+  const headerY = y
+  const colX = [72, 210, 300, 390, 480]
+  const headers = ['Period', 'Views', 'Visitors', 'Orders', 'Revenue']
+
+  headers.forEach((header, index) => {
+    lines.push({
+      text: header,
+      x: colX[index],
+      y: headerY,
+      size: 12,
+      font: 'F2',
+    })
+  })
+
+  drawRule(headerY + 10)
+
+  let rowY = headerY - 18
+  rows.forEach((row) => {
+    const values = [
+      fitText(row.label, 18),
+      String(row.views),
+      String(row.visitors),
+      String(row.orders),
+      formatUsdAmount(row.revenue),
+    ]
+
+    values.forEach((value, index) => {
+      lines.push({
+        text: value,
+        x: colX[index],
+        y: rowY,
+        size: 10,
+        font: 'F1',
+      })
+    })
+
+    drawRule(rowY - 3)
+    rowY -= 17
+  })
+
+  if (payload.rows.length > rows.length) {
+    addLine(`Showing first ${rows.length} of ${payload.rows.length} rows only.`, { size: 10 })
+  }
+
+  const content = buildPdfContent(lines.filter((line) => !line.text.startsWith('__line__')))
+  return buildPdfDocument(content)
 }

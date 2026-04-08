@@ -4,8 +4,11 @@ import { AppError } from '../../../utils/app-error.js'
 import { getAccessibleDepartmentIds, isAdminRole } from './dashboard.helpers.js'
 import { toSafeLead, type LeadRecord } from './lead.helpers.js'
 import {
+  buildLeadReportCsv,
+  buildLeadReportPdf,
   buildReportFilters,
   buildScopedLeadWhere,
+  type LeadReportPayload,
   type ReportQuery,
 } from './report.helpers.js'
 
@@ -59,17 +62,7 @@ async function getScopedDepartments(userId: string, role?: CurrentUserRole) {
   return accessibleDepartmentIds
 }
 
-function buildSummaryCountMap() {
-  return {
-    totalLeads: 0,
-    newLeads: 0,
-    inProgressLeads: 0,
-    convertedLeads: 0,
-    notInterestedLeads: 0,
-  }
-}
-
-export async function getLeadsReportService(userId: string, role?: CurrentUserRole, query?: ReportQuery) {
+async function loadLeadReportPayload(userId: string, role?: CurrentUserRole, query?: ReportQuery) {
   const filters = buildReportFilters(query ?? {})
   const accessibleDepartmentIds = await getScopedDepartments(userId, role)
   const isAdmin = isAdminRole(role)
@@ -84,8 +77,6 @@ export async function getLeadsReportService(userId: string, role?: CurrentUserRo
       orderBy: {
         createdAt: 'desc',
       },
-      skip: (filters.page - 1) * filters.limit,
-      take: filters.limit,
       select: REPORT_LEAD_SELECT,
     }),
     prisma.lead.groupBy({
@@ -122,19 +113,60 @@ export async function getLeadsReportService(userId: string, role?: CurrentUserRo
 
   const leads = rows.map((lead: ReportLeadRow) => toSafeLead(lead))
 
-  return {
+  const report: LeadReportPayload = {
     filters,
     summary: {
       ...summary,
       departmentCount: departmentRows.length,
     },
+    departments: departmentRows,
+    leads,
+  }
+
+  return {
+    report,
     pagination: {
       page: filters.page,
       limit: filters.limit,
       total: totalCount,
       totalPages: Math.max(1, Math.ceil(totalCount / filters.limit)),
     },
-    departments: departmentRows,
-    leads,
+  }
+}
+
+function buildSummaryCountMap() {
+  return {
+    totalLeads: 0,
+    newLeads: 0,
+    inProgressLeads: 0,
+    convertedLeads: 0,
+    notInterestedLeads: 0,
+  }
+}
+
+export async function getLeadsReportService(userId: string, role?: CurrentUserRole, query?: ReportQuery) {
+  const { report, pagination } = await loadLeadReportPayload(userId, role, query)
+  const rows = report.leads.slice((report.filters.page - 1) * report.filters.limit, report.filters.page * report.filters.limit)
+
+  return {
+    filters: report.filters,
+    summary: report.summary,
+    pagination,
+    departments: report.departments,
+    leads: rows,
+  }
+}
+
+export async function exportLeadsReportService(
+  userId: string,
+  role?: CurrentUserRole,
+  query?: ReportQuery
+) {
+  const { report } = await loadLeadReportPayload(userId, role, query)
+
+  return {
+    report,
+    csv: buildLeadReportCsv(report),
+    pdf: buildLeadReportPdf(report),
   }
 }

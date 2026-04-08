@@ -173,9 +173,17 @@ export async function exportStoreReportController(req: Request, res: Response) {
     return res.status(HTTP_STATUS.NOT_FOUND).json(errorResponse('Store not found', HTTP_STATUS.NOT_FOUND))
   }
 
+  const format = String(req.query.format || 'excel').trim().toLowerCase()
+  const isPdf = format === 'pdf'
   const filename = `${payload.report.store.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-${
     payload.report.range
-  }-report.csv`
+  }-report.${isPdf ? 'pdf' : 'csv'}`
+
+  if (isPdf) {
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    return res.status(HTTP_STATUS.OK).send(payload.pdf)
+  }
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8')
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)

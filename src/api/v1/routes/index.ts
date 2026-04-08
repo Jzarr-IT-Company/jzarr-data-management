@@ -6,6 +6,8 @@ import { departmentsRouter } from './departments.routes.js'
 import { healthRouter } from './health.routes.js'
 import { leadsRouter } from './leads.routes.js'
 import { reportsRouter } from './reports.routes.js'
+import { taskRouter } from './task.routes.js'
+import { notificationRouter } from './notifications.routes.js'
 import { storesRouter } from './stores.routes.js'
 import { usersRouter } from './users.routes.js'
 
@@ -17,5 +19,7 @@ v1Router.use('/departments', departmentsRouter)
 v1Router.use('/stores', storesRouter)
 v1Router.use('/leads', leadsRouter)
 v1Router.use('/reports', reportsRouter)
+v1Router.use('/tasks', taskRouter)
+v1Router.use('/notifications', notificationRouter)
 v1Router.use('/admin/users', usersRouter)
 v1Router.use('/health', healthRouter)

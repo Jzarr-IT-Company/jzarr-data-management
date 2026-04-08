@@ -1,10 +1,16 @@
 import { PrismaClient } from '@prisma/client'
+import type { Prisma } from '@prisma/client'
 
-const prismaClient = globalThis as unknown as {
-  prisma?: PrismaClient
+type PrismaClientWithTaskModels = PrismaClient & {
+  task: Prisma.TaskDelegate
+  notification: Prisma.NotificationDelegate
 }
 
-export const prisma = prismaClient.prisma ?? new PrismaClient()
+const prismaClient = globalThis as unknown as {
+  prisma?: PrismaClientWithTaskModels
+}
+
+export const prisma: PrismaClientWithTaskModels = prismaClient.prisma ?? new PrismaClient()
 
 if (process.env.NODE_ENV !== 'production') {
   prismaClient.prisma = prisma

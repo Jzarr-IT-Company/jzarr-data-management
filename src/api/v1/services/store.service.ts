@@ -3,6 +3,7 @@ import { prisma } from '../../../lib/prisma.js'
 import { AppError } from '../../../utils/app-error.js'
 import {
   buildStoreReportCsv,
+  buildStoreReportPdf,
   isPrismaUniqueConstraintError,
   normalizeStoreDate,
   normalizeStoreName,
@@ -179,7 +180,9 @@ function isAdmin(role?: CurrentUserRole) {
   return role === 'ADMIN'
 }
 
-function isEtsyDepartment(department?: { code?: string; name?: string }) {
+const STORE_DEPARTMENT_KEYS = new Set(['etsy', 'amazon', 'blogging', 'bg01'])
+
+function isStoreDepartment(department?: { code?: string; name?: string }) {
   if (!department) {
     return false
   }
@@ -187,7 +190,7 @@ function isEtsyDepartment(department?: { code?: string; name?: string }) {
   const code = String(department.code || '').trim().toUpperCase()
   const name = String(department.name || '').trim().toLowerCase()
 
-  return code === 'ETSY' || name === 'etsy'
+  return STORE_DEPARTMENT_KEYS.has(code.toLowerCase()) || STORE_DEPARTMENT_KEYS.has(name)
 }
 
 async function getAccessibleDepartmentIds(userId: string, role?: CurrentUserRole) {
@@ -231,7 +234,7 @@ async function findDepartmentById(departmentId: string) {
   })
 }
 
-async function ensureEtsyDepartmentAccess(
+async function ensureStoreDepartmentAccess(
   userId: string,
   role: CurrentUserRole | undefined,
   departmentId: string,
@@ -244,8 +247,11 @@ async function ensureEtsyDepartmentAccess(
     throw new AppError('Department not found or inactive', HTTP_STATUS.BAD_REQUEST)
   }
 
-  if (!isEtsyDepartment(department)) {
-    throw new AppError('Store management is available only inside the Etsy department', HTTP_STATUS.BAD_REQUEST)
+  if (!isStoreDepartment(department)) {
+    throw new AppError(
+      'Store management is available only inside the Etsy, Amazon, or Blogging department',
+      HTTP_STATUS.BAD_REQUEST,
+    )
   }
 
   if (accessibleDepartmentIds && !accessibleDepartmentIds.includes(departmentId)) {
@@ -355,8 +361,11 @@ async function getStoreWithScope(
     throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
   }
 
-  if (!isEtsyDepartment(store.department)) {
-    throw new AppError('Store management is available only inside the Etsy department', HTTP_STATUS.BAD_REQUEST)
+  if (!isStoreDepartment(store.department)) {
+    throw new AppError(
+      'Store management is available only inside the Etsy, Amazon, or Blogging department',
+      HTTP_STATUS.BAD_REQUEST,
+    )
   }
 
   return store
@@ -371,7 +380,7 @@ export async function listStoresService(
     throw new AppError('departmentId is required', HTTP_STATUS.BAD_REQUEST)
   }
 
-  await ensureEtsyDepartmentAccess(userId, role, query.departmentId)
+  await ensureStoreDepartmentAccess(userId, role, query.departmentId)
 
   const stores = await storePrisma.store.findMany({
     where: {
@@ -412,7 +421,7 @@ export async function createStoreService(
 ) {
   const normalizedPayload = normalizeStorePayload(payload)
 
-  await ensureEtsyDepartmentAccess(userId, role, normalizedPayload.departmentId)
+  await ensureStoreDepartmentAccess(userId, role, normalizedPayload.departmentId)
 
   try {
     const store = await storePrisma.store.create({
@@ -427,7 +436,7 @@ export async function createStoreService(
     return toSafeStore(store as StoreRecord)
   } catch (error) {
     if (isPrismaUniqueConstraintError(error)) {
-      throw new AppError('A store with this name or URL already exists in Etsy', HTTP_STATUS.CONFLICT)
+      throw new AppError('A store with this name or URL already exists in this department', HTTP_STATUS.CONFLICT)
     }
 
     throw error
@@ -448,7 +457,7 @@ export async function updateStoreService(
 
   const normalizedPayload = normalizeStoreUpdatePayload(payload, toSafeStore(store))
 
-  await ensureEtsyDepartmentAccess(userId, role, normalizedPayload.departmentId)
+  await ensureStoreDepartmentAccess(userId, role, normalizedPayload.departmentId)
 
   try {
     const updatedStore = await storePrisma.store.update({
@@ -468,7 +477,7 @@ export async function updateStoreService(
     return toSafeStore(updatedStore as StoreRecord)
   } catch (error) {
     if (isPrismaUniqueConstraintError(error)) {
-      throw new AppError('A store with this name or URL already exists in Etsy', HTTP_STATUS.CONFLICT)
+      throw new AppError('A store with this name or URL already exists in this department', HTTP_STATUS.CONFLICT)
     }
 
     throw error
@@ -616,5 +625,6 @@ export async function exportStoreReportService(
   return {
     report,
     csv: buildStoreReportCsv(report),
+    pdf: buildStoreReportPdf(report),
   }
 }

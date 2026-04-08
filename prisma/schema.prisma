@@ -24,6 +24,20 @@ enum LeadStatus {
   NOT_INTERESTED
 }
 
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  COMPLETE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
 model User {
   id                   String    @id @default(cuid())
   name                 String
@@ -42,8 +56,12 @@ model User {
   updatedStores         Store[]   @relation("UpdatedStores")
   createdStoreStats     StoreStat[] @relation("CreatedStoreStats")
   updatedStoreStats     StoreStat[] @relation("UpdatedStoreStats")
+  assignedTasks         Task[]    @relation("AssignedTasks")
+  createdTasks          Task[]    @relation("CreatedTasks")
+  updatedTasks          Task[]    @relation("UpdatedTasks")
   leadActivities        LeadActivity[]
   refreshTokens         RefreshToken[]
+  notifications         Notification[]
 }
 
 model Department {
@@ -57,6 +75,7 @@ model Department {
   managers    User[]    @relation("ManagedDepartments")
   leads       Lead[]
   stores      Store[]
+  tasks       Task[]
 }
 
 model Lead {
@@ -135,6 +154,48 @@ model StoreStat {
 
   @@unique([storeId, statDate])
   @@index([storeId, statDate])
+}
+
+model Task {
+  id            String       @id @default(cuid())
+  title         String
+  description   String
+  managerId     String
+  departmentId  String
+  status        TaskStatus   @default(TODO)
+  priority      TaskPriority @default(MEDIUM)
+  startDate     DateTime
+  dueDate       DateTime
+  notes         String?
+  createdById   String?
+  updatedById   String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  manager       User         @relation("AssignedTasks", fields: [managerId], references: [id], onDelete: Restrict)
+  department    Department   @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  createdBy     User?        @relation("CreatedTasks", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy     User?        @relation("UpdatedTasks", fields: [updatedById], references: [id], onDelete: SetNull)
+  notifications Notification[]
+
+  @@index([managerId, status])
+  @@index([departmentId, status])
+  @@index([dueDate])
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  userId      String
+  taskId      String?
+  type        String
+  title       String
+  message     String
+  isRead      Boolean   @default(false)
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task        Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([userId, isRead, createdAt])
 }
 
 model RefreshToken {

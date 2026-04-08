@@ -1,7 +1,13 @@
+import { createServer } from 'node:http'
+
 import app from './app.js'
 import { env } from './config/loadEnv.js'
 import { logger } from './config/logger.js'
+import { initializeTaskSocket } from './socket/task-socket.js'
 
-app.listen(env.PORT, () => {
+const server = createServer(app)
+initializeTaskSocket(server)
+
+server.listen(env.PORT, () => {
   logger.info(`Jzarr Data Manage backend running on port ${env.PORT}`)
 })
