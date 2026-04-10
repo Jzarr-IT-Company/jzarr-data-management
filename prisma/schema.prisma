@@ -7,6 +7,189 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id                 String         @id @default(cuid())
+  name               String
+  email              String         @unique
+  passwordHash       String
+  role               UserRole
+  status             UserStatus     @default(ACTIVE)
+  phone              String?        @unique
+  designation        String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  allowedScreens     Json?
+  createdLeads       Lead[]         @relation("CreatedLeads")
+  updatedLeads       Lead[]         @relation("UpdatedLeads")
+  leadActivities     LeadActivity[]
+  notifications      Notification[]
+  refreshTokens      RefreshToken[]
+  createdStores      Store[]        @relation("CreatedStores")
+  updatedStores      Store[]        @relation("UpdatedStores")
+  createdStoreStats  StoreStat[]    @relation("CreatedStoreStats")
+  updatedStoreStats  StoreStat[]    @relation("UpdatedStoreStats")
+  createdTasks       Task[]         @relation("CreatedTasks")
+  assignedTasks      Task[]         @relation("AssignedTasks")
+  updatedTasks       Task[]         @relation("UpdatedTasks")
+  managedDepartments Department[]   @relation("ManagedDepartments")
+}
+
+model Department {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  code      String   @unique
+  accent    String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  leads     Lead[]
+  stores    Store[]
+  tasks     Task[]
+  managers  User[]   @relation("ManagedDepartments")
+}
+
+model Lead {
+  id           String         @id @default(cuid())
+  referenceNo  String         @unique
+  name         String
+  fatherName   String?
+  email        String?
+  phone        String         @unique
+  whatsapp     String?
+  city         String?
+  address      String?
+  message      String?
+  status       LeadStatus     @default(NEW)
+  departmentId String
+  createdById  String?
+  updatedById  String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  createdBy    User?          @relation("CreatedLeads", fields: [createdById], references: [id])
+  department   Department     @relation(fields: [departmentId], references: [id])
+  updatedBy    User?          @relation("UpdatedLeads", fields: [updatedById], references: [id])
+  activities   LeadActivity[]
+
+  @@index([departmentId, status])
+  @@index([createdById], map: "Lead_createdById_fkey")
+  @@index([updatedById], map: "Lead_updatedById_fkey")
+}
+
+model LeadActivity {
+  id        String   @id @default(cuid())
+  leadId    String
+  userId    String?
+  action    String
+  note      String?
+  createdAt DateTime @default(now())
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([leadId, createdAt])
+  @@index([userId], map: "LeadActivity_userId_fkey")
+}
+
+model Store {
+  id           String      @id @default(cuid())
+  departmentId String
+  name         String
+  url          String
+  isActive     Boolean     @default(true)
+  createdById  String?
+  updatedById  String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  createdBy    User?       @relation("CreatedStores", fields: [createdById], references: [id])
+  department   Department  @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  updatedBy    User?       @relation("UpdatedStores", fields: [updatedById], references: [id])
+  stats        StoreStat[]
+
+  @@unique([departmentId, name])
+  @@unique([departmentId, url])
+  @@index([departmentId, isActive])
+  @@index([createdById], map: "Store_createdById_fkey")
+  @@index([updatedById], map: "Store_updatedById_fkey")
+}
+
+model StoreStat {
+  id          String   @id @default(cuid())
+  storeId     String
+  statDate    DateTime
+  views       Int      @default(0)
+  visitors    Int      @default(0)
+  orders      Int      @default(0)
+  revenue     Decimal  @default(0.000000000000000000000000000000)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   User?    @relation("CreatedStoreStats", fields: [createdById], references: [id])
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  updatedBy   User?    @relation("UpdatedStoreStats", fields: [updatedById], references: [id])
+
+  @@unique([storeId, statDate])
+  @@index([storeId, statDate])
+  @@index([createdById], map: "StoreStat_createdById_fkey")
+  @@index([updatedById], map: "StoreStat_updatedById_fkey")
+}
+
+model Task {
+  id            String         @id @default(cuid())
+  title         String
+  description   String
+  managerId     String
+  departmentId  String
+  status        TaskStatus     @default(TODO)
+  priority      TaskPriority   @default(MEDIUM)
+  startDate     DateTime
+  dueDate       DateTime
+  notes         String?
+  createdById   String?
+  updatedById   String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  notifications Notification[]
+  createdBy     User?          @relation("CreatedTasks", fields: [createdById], references: [id])
+  department    Department     @relation(fields: [departmentId], references: [id])
+  manager       User           @relation("AssignedTasks", fields: [managerId], references: [id])
+  updatedBy     User?          @relation("UpdatedTasks", fields: [updatedById], references: [id])
+
+  @@index([managerId, status])
+  @@index([departmentId, status])
+  @@index([dueDate])
+  @@index([createdById], map: "Task_createdById_fkey")
+  @@index([updatedById], map: "Task_updatedById_fkey")
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  taskId    String?
+  type      String
+  title     String
+  message   String
+  isRead    Boolean   @default(false)
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  task      Task?     @relation(fields: [taskId], references: [id])
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+  @@index([taskId], map: "Notification_taskId_fkey")
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
 enum UserRole {
   ADMIN
   MANAGER
@@ -37,177 +220,4 @@ enum TaskPriority {
   MEDIUM
   HIGH
   URGENT
-}
-
-model User {
-  id                   String    @id @default(cuid())
-  name                 String
-  email                String    @unique
-  passwordHash         String
-  role                 UserRole
-  status               UserStatus @default(ACTIVE)
-  phone                String?   @unique
-  designation          String?
-  allowedScreens       Json?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
-  managedDepartments    Department[] @relation("ManagedDepartments")
-  createdLeads          Lead[]    @relation("CreatedLeads")
-  updatedLeads          Lead[]    @relation("UpdatedLeads")
-  createdStores         Store[]   @relation("CreatedStores")
-  updatedStores         Store[]   @relation("UpdatedStores")
-  createdStoreStats     StoreStat[] @relation("CreatedStoreStats")
-  updatedStoreStats     StoreStat[] @relation("UpdatedStoreStats")
-  assignedTasks         Task[]    @relation("AssignedTasks")
-  createdTasks          Task[]    @relation("CreatedTasks")
-  updatedTasks          Task[]    @relation("UpdatedTasks")
-  leadActivities        LeadActivity[]
-  refreshTokens         RefreshToken[]
-  notifications         Notification[]
-}
-
-model Department {
-  id          String    @id @default(cuid())
-  name        String    @unique
-  code        String    @unique
-  accent      String
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  managers    User[]    @relation("ManagedDepartments")
-  leads       Lead[]
-  stores      Store[]
-  tasks       Task[]
-}
-
-model Lead {
-  id                String      @id @default(cuid())
-  referenceNo       String      @unique
-  name              String
-  fatherName        String?
-  email             String?
-  phone             String      @unique
-  whatsapp          String?
-  city              String?
-  address           String?
-  message           String?
-  status            LeadStatus  @default(NEW)
-  departmentId      String
-  createdById       String?
-  updatedById       String?
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
-  department        Department  @relation(fields: [departmentId], references: [id])
-  createdBy         User?       @relation("CreatedLeads", fields: [createdById], references: [id])
-  updatedBy         User?       @relation("UpdatedLeads", fields: [updatedById], references: [id])
-  activities        LeadActivity[]
-
-  @@index([departmentId, status])
-}
-
-model LeadActivity {
-  id          String    @id @default(cuid())
-  leadId      String
-  userId      String?
-  action      String
-  note        String?
-  createdAt   DateTime  @default(now())
-  lead        Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([leadId, createdAt])
-}
-
-model Store {
-  id            String      @id @default(cuid())
-  departmentId   String
-  name          String
-  url           String
-  isActive      Boolean     @default(true)
-  createdById   String?
-  updatedById   String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  department    Department  @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-  createdBy     User?       @relation("CreatedStores", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy     User?       @relation("UpdatedStores", fields: [updatedById], references: [id], onDelete: SetNull)
-  stats         StoreStat[]
-
-  @@unique([departmentId, name])
-  @@unique([departmentId, url])
-  @@index([departmentId, isActive])
-}
-
-model StoreStat {
-  id            String      @id @default(cuid())
-  storeId       String
-  statDate      DateTime
-  views         Int         @default(0)
-  visitors      Int         @default(0)
-  orders        Int         @default(0)
-  revenue       Decimal     @default(0)
-  createdById   String?
-  updatedById   String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  store         Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  createdBy     User?       @relation("CreatedStoreStats", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy     User?       @relation("UpdatedStoreStats", fields: [updatedById], references: [id], onDelete: SetNull)
-
-  @@unique([storeId, statDate])
-  @@index([storeId, statDate])
-}
-
-model Task {
-  id            String       @id @default(cuid())
-  title         String
-  description   String
-  managerId     String
-  departmentId  String
-  status        TaskStatus   @default(TODO)
-  priority      TaskPriority @default(MEDIUM)
-  startDate     DateTime
-  dueDate       DateTime
-  notes         String?
-  createdById   String?
-  updatedById   String?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  manager       User         @relation("AssignedTasks", fields: [managerId], references: [id], onDelete: Restrict)
-  department    Department   @relation(fields: [departmentId], references: [id], onDelete: Restrict)
-  createdBy     User?        @relation("CreatedTasks", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy     User?        @relation("UpdatedTasks", fields: [updatedById], references: [id], onDelete: SetNull)
-  notifications Notification[]
-
-  @@index([managerId, status])
-  @@index([departmentId, status])
-  @@index([dueDate])
-}
-
-model Notification {
-  id          String    @id @default(cuid())
-  userId      String
-  taskId      String?
-  type        String
-  title       String
-  message     String
-  isRead      Boolean   @default(false)
-  readAt      DateTime?
-  createdAt   DateTime  @default(now())
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  task        Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
-
-  @@index([userId, isRead, createdAt])
-}
-
-model RefreshToken {
-  id          String    @id @default(cuid())
-  userId      String
-  tokenHash   String    @unique
-  expiresAt   DateTime
-  createdAt   DateTime  @default(now())
-  revokedAt   DateTime?
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, expiresAt])
 }
