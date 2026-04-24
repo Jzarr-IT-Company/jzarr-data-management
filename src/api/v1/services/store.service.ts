@@ -17,7 +17,7 @@ import {
   type StoreReportRange,
 } from './store.helpers.js'
 
-type CurrentUserRole = 'ADMIN' | 'MANAGER' | 'SUB_ADMIN'
+type CurrentUserRole = 'ADMIN' | 'MANAGER' | 'MANAGER_USER' | 'SUB_ADMIN'
 
 type StoreListQuery = {
   departmentId?: string

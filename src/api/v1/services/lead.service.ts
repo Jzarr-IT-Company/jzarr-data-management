@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import { HTTP_STATUS } from '../../../constant/index.js'
 import { prisma } from '../../../lib/prisma.js'
 import { AppError } from '../../../utils/app-error.js'
+import { getUserAccessContext, type CurrentUserRole } from './user.access.js'
 import {
   generateLeadReferenceNo,
   isPrismaUniqueConstraintError,
@@ -15,8 +16,6 @@ import {
   type LeadStatusValue,
   leadStatusValues,
 } from './lead.helpers.js'
-
-type CurrentUserRole = 'ADMIN' | 'MANAGER' | 'SUB_ADMIN'
 
 type LeadListQuery = {
   search?: string
@@ -92,6 +91,7 @@ const LEAD_SELECT = {
   status: true,
   createdAt: true,
   updatedAt: true,
+  createdById: true,
   department: {
     select: {
       id: true,
@@ -104,12 +104,14 @@ const LEAD_SELECT = {
     select: {
       id: true,
       name: true,
+      email: true,
     },
   },
   updatedBy: {
     select: {
       id: true,
       name: true,
+      email: true,
     },
   },
   activities: {
@@ -125,6 +127,7 @@ const LEAD_SELECT = {
         select: {
           id: true,
           name: true,
+          email: true,
         },
       },
     },
@@ -135,30 +138,8 @@ function isAdmin(role?: CurrentUserRole) {
   return role === 'ADMIN'
 }
 
-async function getAccessibleDepartmentIds(userId: string, role?: CurrentUserRole) {
-  if (isAdmin(role)) {
-    return null
-  }
-
-  const user = await prisma.user.findUnique({
-    where: {
-      id: userId,
-    },
-    select: {
-      status: true,
-      managedDepartments: {
-        select: {
-          id: true,
-        },
-      },
-    },
-  })
-
-  if (!user || user.status !== 'ACTIVE') {
-    throw new AppError('Unauthorized', HTTP_STATUS.UNAUTHORIZED)
-  }
-
-  return user.managedDepartments.map((department: { id: string }) => department.id)
+async function getAccessContext(userId: string, role?: CurrentUserRole) {
+  return getUserAccessContext(userId, role)
 }
 
 async function ensureLeadDepartmentAccess(
@@ -166,7 +147,7 @@ async function ensureLeadDepartmentAccess(
   role: CurrentUserRole | undefined,
   departmentId: string
 ) {
-  const accessibleDepartmentIds = await getAccessibleDepartmentIds(userId, role)
+  const { accessibleDepartmentIds } = await getAccessContext(userId, role)
 
   const department = await prisma.department.findUnique({
     where: {
@@ -196,7 +177,12 @@ async function findLeadById(leadId: string): Promise<LeadRecord | null> {
   }) as Promise<LeadRecord | null>
 }
 
-function buildLeadWhereClause(query: LeadListQuery, accessibleDepartmentIds: string[] | null) {
+function buildLeadWhereClause(
+  query: LeadListQuery,
+  accessibleDepartmentIds: string[] | null,
+  userId?: string,
+  ownLeadOnly?: boolean
+) {
   const where: Record<string, unknown> = {}
   const status = normalizeLeadStatus(query.status)
   const search = query.search?.trim()
@@ -216,6 +202,10 @@ function buildLeadWhereClause(query: LeadListQuery, accessibleDepartmentIds: str
     where.departmentId = {
       in: accessibleDepartmentIds,
     }
+  }
+
+  if (ownLeadOnly && userId) {
+    where.createdById = userId
   }
 
   if (status) {
@@ -392,8 +382,13 @@ export async function listLeadsService(
   role: CurrentUserRole | undefined,
   query: LeadListQuery
 ) {
-  const accessibleDepartmentIds = await getAccessibleDepartmentIds(userId, role)
-  const where = buildLeadWhereClause(query, accessibleDepartmentIds)
+  const accessContext = await getAccessContext(userId, role)
+  const where = buildLeadWhereClause(
+    query,
+    accessContext.accessibleDepartmentIds,
+    userId,
+    accessContext.ownLeadOnly
+  )
 
   const leads = await prisma.lead.findMany({
     where,
@@ -413,9 +408,16 @@ export async function getLeadService(userId: string, role: CurrentUserRole | und
     return null
   }
 
-  const accessibleDepartmentIds = await getAccessibleDepartmentIds(userId, role)
+  const accessContext = await getAccessContext(userId, role)
 
-  if (accessibleDepartmentIds && !accessibleDepartmentIds.includes(lead.department.id)) {
+  if (
+    accessContext.accessibleDepartmentIds &&
+    !accessContext.accessibleDepartmentIds.includes(lead.department.id)
+  ) {
+    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
+  }
+
+  if (accessContext.ownLeadOnly && lead.createdById !== userId) {
     throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
   }
 
@@ -470,9 +472,16 @@ export async function updateLeadService(
     return null
   }
 
-  const accessibleDepartmentIds = await getAccessibleDepartmentIds(userId, role)
+  const accessContext = await getAccessContext(userId, role)
 
-  if (accessibleDepartmentIds && !accessibleDepartmentIds.includes(lead.department.id)) {
+  if (
+    accessContext.accessibleDepartmentIds &&
+    !accessContext.accessibleDepartmentIds.includes(lead.department.id)
+  ) {
+    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
+  }
+
+  if (accessContext.ownLeadOnly && lead.createdById !== userId) {
     throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
   }
 
@@ -552,9 +561,16 @@ export async function deleteLeadService(userId: string, role: CurrentUserRole | 
     return null
   }
 
-  const accessibleDepartmentIds = await getAccessibleDepartmentIds(userId, role)
+  const accessContext = await getAccessContext(userId, role)
 
-  if (accessibleDepartmentIds && !accessibleDepartmentIds.includes(lead.department.id)) {
+  if (
+    accessContext.accessibleDepartmentIds &&
+    !accessContext.accessibleDepartmentIds.includes(lead.department.id)
+  ) {
+    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
+  }
+
+  if (accessContext.ownLeadOnly && lead.createdById !== userId) {
     throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
   }
 

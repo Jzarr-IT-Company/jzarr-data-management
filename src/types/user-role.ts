@@ -1,1 +1,1 @@
-export type UserRole = 'ADMIN' | 'MANAGER' | 'SUB_ADMIN'
+export type UserRole = 'ADMIN' | 'MANAGER' | 'MANAGER_USER' | 'SUB_ADMIN'

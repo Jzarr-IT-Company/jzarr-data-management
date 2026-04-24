@@ -5,11 +5,14 @@ import { AppError } from '../../../utils/app-error.js'
 import {
   isPrismaUniqueConstraintError,
   normalizeDepartmentIds,
+  MANAGER_USER_DEFAULT_SCREENS,
+  type ManagerUserRecord,
   toSafeSubAdmin,
   toSafeManager,
   type ManagerRecord,
   type SubAdminRecord,
   SUB_ADMIN_SCREEN_OPTIONS,
+  toSafeManagerUser,
 } from './user.helpers.js'
 
 type ManagerDepartmentPayload = {
@@ -21,6 +24,17 @@ type ManagerDepartmentPayload = {
   status?: 'ACTIVE' | 'INACTIVE'
   departmentIds: string[]
 }
+
+type ManagerUserPayload = {
+  name: string
+  email: string
+  password: string
+  phone?: string | null
+  designation?: string | null
+  status?: 'ACTIVE' | 'INACTIVE'
+}
+
+type UpdateManagerUserPayload = Partial<Omit<ManagerUserPayload, 'password'>>
 
 type SubAdminPayload = ManagerDepartmentPayload & {
   allowedScreens: string[]
@@ -39,10 +53,35 @@ type UpdateSubAdminPayload = Partial<
 
 const MANAGER_INCLUDE = {
   managedDepartments: true,
+  _count: {
+    select: {
+      teamUsers: true,
+    },
+  },
 } as const
 
 const SUB_ADMIN_INCLUDE = {
   managedDepartments: true,
+} as const
+
+const MANAGER_USER_INCLUDE = {
+  manager: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      status: true,
+      managedDepartments: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          accent: true,
+          isActive: true,
+        },
+      },
+    },
+  },
 } as const
 
 function normalizeScreens(screens: string[]) {
@@ -83,6 +122,17 @@ async function findManagerById(managerId: string) {
   })
 }
 
+async function findManagerUserById(managerId: string, managerUserId: string) {
+  return prisma.user.findFirst({
+    where: {
+      id: managerUserId,
+      role: 'MANAGER_USER',
+      managerId,
+    },
+    include: MANAGER_USER_INCLUDE,
+  })
+}
+
 function buildSafeManagerList(managers: ManagerRecord[]) {
   return managers.map(toSafeManager)
 }
@@ -98,11 +148,20 @@ export async function listManagersService() {
     },
   })
 
-  return buildSafeManagerList(managers as ManagerRecord[])
+  return buildSafeManagerList(
+    managers.map((manager) => ({
+      ...(manager as ManagerRecord),
+      teamUserCount: manager._count?.teamUsers ?? 0,
+    })),
+  )
 }
 
 function buildSafeSubAdminList(subAdmins: SubAdminRecord[]) {
   return subAdmins.map((subAdmin) => toSafeSubAdmin(subAdmin))
+}
+
+function buildSafeManagerUserList(managerUsers: ManagerUserRecord[]) {
+  return managerUsers.map((managerUser) => toSafeManagerUser(managerUser))
 }
 
 async function findSubAdminById(subAdminId: string) {
@@ -315,6 +374,194 @@ export async function deleteSubAdminService(subAdminId: string) {
   await prisma.user.delete({
     where: {
       id: subAdminId,
+    },
+  })
+
+  return true
+}
+
+export async function listManagerUsersService(managerId: string) {
+  const managerUsers = await prisma.user.findMany({
+    where: {
+      role: 'MANAGER_USER',
+      managerId,
+    },
+    include: MANAGER_USER_INCLUDE,
+    orderBy: {
+      createdAt: 'desc',
+    },
+  })
+
+  return buildSafeManagerUserList(managerUsers as ManagerUserRecord[])
+}
+
+export async function createManagerUserService(
+  managerId: string,
+  payload: ManagerUserPayload
+) {
+  const manager = await findManagerById(managerId)
+
+  if (!manager) {
+    return null
+  }
+
+  const passwordHash = await hashPassword(payload.password)
+
+  try {
+    const managerUser = await prisma.user.create({
+      data: {
+        name: payload.name.trim(),
+        email: payload.email.trim().toLowerCase(),
+        passwordHash,
+        role: 'MANAGER_USER',
+        status: payload.status ?? 'ACTIVE',
+        phone: payload.phone?.trim() || undefined,
+        designation: payload.designation?.trim() || undefined,
+        allowedScreens: Array.from(MANAGER_USER_DEFAULT_SCREENS),
+        manager: {
+          connect: {
+            id: managerId,
+          },
+        },
+      },
+      include: MANAGER_USER_INCLUDE,
+    })
+
+    return toSafeManagerUser(managerUser as ManagerUserRecord)
+  } catch (error) {
+    if (isPrismaUniqueConstraintError(error)) {
+      throw new AppError(
+        'A manager user with this email or phone already exists',
+        HTTP_STATUS.CONFLICT
+      )
+    }
+
+    throw error
+  }
+}
+
+export async function getManagerUserService(managerId: string, managerUserId: string) {
+  const managerUser = await findManagerUserById(managerId, managerUserId)
+
+  if (!managerUser) {
+    return null
+  }
+
+  return toSafeManagerUser(managerUser as ManagerUserRecord)
+}
+
+export async function updateManagerUserService(
+  managerId: string,
+  managerUserId: string,
+  payload: UpdateManagerUserPayload
+) {
+  const existingManagerUser = await findManagerUserById(managerId, managerUserId)
+
+  if (!existingManagerUser) {
+    return null
+  }
+
+  const updateData = {
+    ...(payload.name !== undefined ? { name: payload.name.trim() } : {}),
+    ...(payload.email !== undefined ? { email: payload.email.trim().toLowerCase() } : {}),
+    ...(payload.phone !== undefined
+      ? { phone: payload.phone?.trim() ? payload.phone.trim() : null }
+      : {}),
+    ...(payload.designation !== undefined
+      ? { designation: payload.designation?.trim() ? payload.designation.trim() : null }
+      : {}),
+    ...(payload.status !== undefined ? { status: payload.status } : {}),
+  }
+
+  try {
+    const managerUser = await prisma.user.update({
+      where: {
+        id: managerUserId,
+      },
+      data: updateData,
+      include: MANAGER_USER_INCLUDE,
+    })
+
+    return toSafeManagerUser(managerUser as ManagerUserRecord)
+  } catch (error) {
+    if (isPrismaUniqueConstraintError(error)) {
+      throw new AppError(
+        'A manager user with this email or phone already exists',
+        HTTP_STATUS.CONFLICT
+      )
+    }
+
+    throw error
+  }
+}
+
+export async function updateManagerUserStatusService(
+  managerId: string,
+  managerUserId: string,
+  status: ManagerUserPayload['status']
+) {
+  if (!status) {
+    throw new AppError('Status is required', HTTP_STATUS.BAD_REQUEST)
+  }
+
+  return updateManagerUserService(managerId, managerUserId, { status })
+}
+
+export async function resetManagerUserPasswordService(
+  managerId: string,
+  managerUserId: string,
+  password: string
+) {
+  const managerUser = await findManagerUserById(managerId, managerUserId)
+
+  if (!managerUser) {
+    return null
+  }
+
+  const passwordHash = await hashPassword(password)
+
+  await prisma.user.update({
+    where: {
+      id: managerUserId,
+    },
+    data: {
+      passwordHash,
+    },
+  })
+
+  return toSafeManagerUser(managerUser as ManagerUserRecord)
+}
+
+export async function deleteManagerUserService(managerId: string, managerUserId: string) {
+  const managerUser = await findManagerUserById(managerId, managerUserId)
+
+  if (!managerUser) {
+    return null
+  }
+
+  const leadCount = await prisma.lead.count({
+    where: {
+      OR: [
+        {
+          createdById: managerUserId,
+        },
+        {
+          updatedById: managerUserId,
+        },
+      ],
+    },
+  })
+
+  if (leadCount > 0) {
+    throw new AppError(
+      'Manager user has linked leads and cannot be deleted. Deactivate the account instead.',
+      HTTP_STATUS.CONFLICT
+    )
+  }
+
+  await prisma.user.delete({
+    where: {
+      id: managerUserId,
     },
   })
 

@@ -19,7 +19,35 @@ const AUTH_USER_INCLUDE = {
       isActive: true,
     },
   },
+  manager: {
+    select: {
+      id: true,
+      status: true,
+      managedDepartments: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          accent: true,
+          isActive: true,
+        },
+      },
+    },
+  },
 } as const
+
+function isAccessibleUserActive(user: {
+  role: string
+  manager?: {
+    status: 'ACTIVE' | 'INACTIVE'
+  } | null
+}) {
+  if (user.role === 'MANAGER_USER') {
+    return user.manager?.status === 'ACTIVE'
+  }
+
+  return true
+}
 
 export async function loginService(email: string, password: string) {
   const normalizedEmail = email.trim().toLowerCase()
@@ -32,9 +60,17 @@ export async function loginService(email: string, password: string) {
     return null
   }
 
+  if (!isAccessibleUserActive(user)) {
+    return null
+  }
+
   const isPasswordValid = await comparePassword(password, user.passwordHash)
 
   if (!isPasswordValid) {
+    return null
+  }
+
+  if (user.role === 'MANAGER_USER' && (!user.manager || user.manager.status !== 'ACTIVE')) {
     return null
   }
 
@@ -61,6 +97,10 @@ export async function getCurrentUserService(userId: string) {
     return null
   }
 
+  if (!isAccessibleUserActive(user)) {
+    return null
+  }
+
   return toSafeUser(user)
 }
 
@@ -76,6 +116,10 @@ export async function refreshSessionService(refreshToken: string) {
   })
 
   if (!storedToken || !isRefreshTokenActive(storedToken) || !isActiveUser(storedToken.user)) {
+    return null
+  }
+
+  if (!isAccessibleUserActive(storedToken.user)) {
     return null
   }
 
@@ -116,6 +160,10 @@ export async function changeCurrentUserPasswordService(
   })
 
   if (!user || !isActiveUser(user)) {
+    return null
+  }
+
+  if (!isAccessibleUserActive(user)) {
     return null
   }
 

@@ -21,7 +21,7 @@ function getDepartmentIdParam(req: Request) {
 }
 
 export async function listDepartmentsController(req: Request, res: Response) {
-  const departments = await listDepartmentsService(req.user?.role)
+  const departments = await listDepartmentsService(req.user!.id, req.user?.role)
 
   return res.status(HTTP_STATUS.OK).json(successResponse('Departments fetched', departments))
 }
@@ -35,7 +35,7 @@ export async function getDepartmentController(req: Request, res: Response) {
       .json(errorResponse('Department id is required', HTTP_STATUS.BAD_REQUEST))
   }
 
-  const department = await getDepartmentService(departmentId, req.user?.role)
+  const department = await getDepartmentService(departmentId, req.user!.id, req.user?.role)
 
   if (!department) {
     return res

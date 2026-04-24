@@ -16,9 +16,11 @@ model User {
   status             UserStatus     @default(ACTIVE)
   phone              String?        @unique
   designation        String?
+  managerId          String?
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
   allowedScreens     Json?
+  manager            User?          @relation("ManagerTeam", fields: [managerId], references: [id], onDelete: SetNull)
   createdLeads       Lead[]         @relation("CreatedLeads")
   updatedLeads       Lead[]         @relation("UpdatedLeads")
   leadActivities     LeadActivity[]
@@ -32,6 +34,9 @@ model User {
   assignedTasks      Task[]         @relation("AssignedTasks")
   updatedTasks       Task[]         @relation("UpdatedTasks")
   managedDepartments Department[]   @relation("ManagedDepartments")
+  teamUsers          User[]         @relation("ManagerTeam")
+
+  @@index([managerId])
 }
 
 model Department {
@@ -193,6 +198,7 @@ model RefreshToken {
 enum UserRole {
   ADMIN
   MANAGER
+  MANAGER_USER
   SUB_ADMIN
 }
 

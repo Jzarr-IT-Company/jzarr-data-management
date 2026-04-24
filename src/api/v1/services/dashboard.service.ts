@@ -5,9 +5,8 @@ import {
   buildLeadScopeWhere,
   getAccessibleDepartmentIds,
   isAdminRole,
+  type CurrentUserRole,
 } from './dashboard.helpers.js'
-
-type CurrentUserRole = 'ADMIN' | 'MANAGER' | 'SUB_ADMIN'
 
 const LEAD_STATUSES = ['NEW', 'IN_PROGRESS', 'CONVERTED', 'NOT_INTERESTED'] as const
 
@@ -38,6 +37,13 @@ type DashboardActivity = {
   } | null
 }
 
+type DashboardLeadCreator = {
+  id: string
+  name: string
+  email: string
+  leadCount: number
+}
+
 export type DashboardOverview = {
   scope: {
     isAdmin: boolean
@@ -58,10 +64,12 @@ export type DashboardOverview = {
   }>
   departments: DashboardDepartment[]
   recentActivities: DashboardActivity[]
+  leadCreators: DashboardLeadCreator[]
 }
 
 async function getScopedLeadWhere(userId: string, role?: CurrentUserRole) {
   const accessibleDepartmentIds = await getAccessibleDepartmentIds(userId, role)
+  const ownLeadOnly = role === 'MANAGER_USER'
 
   if (role !== 'ADMIN' && accessibleDepartmentIds !== null && accessibleDepartmentIds.length === 0) {
     throw new AppError('Unauthorized', HTTP_STATUS.UNAUTHORIZED)
@@ -69,7 +77,7 @@ async function getScopedLeadWhere(userId: string, role?: CurrentUserRole) {
 
   return {
     accessibleDepartmentIds,
-    where: buildLeadScopeWhere(accessibleDepartmentIds),
+    where: buildLeadScopeWhere(accessibleDepartmentIds, ownLeadOnly ? userId : undefined),
   }
 }
 
@@ -103,8 +111,14 @@ export async function getDashboardOverviewService(userId: string, role?: Current
   const leadScope = await getScopedLeadWhere(userId, role)
   const departmentScope = await getScopedDepartmentWhere(userId, role)
 
-  const [leadTotal, leadStatusGroups, departmentRows, activeManagerCount, recentActivities] =
-    await Promise.all([
+  const [
+    leadTotal,
+    leadStatusGroups,
+    departmentRows,
+    activeManagerCount,
+    recentActivities,
+    leadCreatorGroups,
+  ] = await Promise.all([
       prisma.lead.count({
         where: leadScope.where,
       }),
@@ -184,8 +198,16 @@ export async function getDashboardOverviewService(userId: string, role?: Current
             select: {
               id: true,
               name: true,
+              email: true,
             },
           },
+        },
+      }),
+      prisma.lead.groupBy({
+        by: ['createdById'],
+        where: leadScope.where,
+        _count: {
+          _all: true,
         },
       }),
     ])
@@ -215,6 +237,57 @@ export async function getDashboardOverviewService(userId: string, role?: Current
     user: activity.user,
   }))
 
+  const creatorIds = leadCreatorGroups
+    .map((group) => group.createdById)
+    .filter((creatorId): creatorId is string => typeof creatorId === 'string' && creatorId.length > 0)
+
+  const creatorRows =
+    creatorIds.length > 0
+      ? await prisma.user.findMany({
+          where: {
+            id: {
+              in: creatorIds,
+            },
+          },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        })
+      : []
+
+  const creatorMap = new Map(
+    creatorRows.map((creator) => [
+      creator.id,
+      {
+        id: creator.id,
+        name: creator.name,
+        email: creator.email,
+      },
+    ])
+  )
+
+  const leadCreators = leadCreatorGroups
+    .map((group) => {
+      if (!group.createdById) {
+        return null
+      }
+
+      const creator = creatorMap.get(group.createdById)
+
+      if (!creator) {
+        return null
+      }
+
+      return {
+        ...creator,
+        leadCount: group._count._all,
+      }
+    })
+    .filter((creator): creator is DashboardLeadCreator => creator !== null)
+    .sort((left, right) => right.leadCount - left.leadCount)
+
   return {
     scope: {
       isAdmin,
@@ -235,5 +308,6 @@ export async function getDashboardOverviewService(userId: string, role?: Current
     })),
     departments,
     recentActivities: activities,
+    leadCreators,
   } satisfies DashboardOverview
 }

@@ -12,6 +12,7 @@ type DepartmentSummary = {
 type PersonSummary = {
   id: string
   name: string
+  email: string | null
 }
 
 export type LeadActivityRecord = {
@@ -36,6 +37,7 @@ export type LeadRecord = {
   status: LeadStatusValue
   createdAt: Date
   updatedAt: Date
+  createdById: string | null
   department: DepartmentSummary
   createdBy: PersonSummary | null
   updatedBy: PersonSummary | null

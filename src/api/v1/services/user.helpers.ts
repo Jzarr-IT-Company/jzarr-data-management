@@ -6,6 +6,13 @@ type DepartmentSummary = {
   isActive: boolean
 }
 
+type ManagerSummary = {
+  id: string
+  name: string
+  email: string
+  status: 'ACTIVE' | 'INACTIVE'
+}
+
 export type ManagerRecord = {
   id: string
   name: string
@@ -17,6 +24,7 @@ export type ManagerRecord = {
   createdAt: Date
   updatedAt: Date
   managedDepartments: DepartmentSummary[]
+  teamUserCount?: number
 }
 
 export type SafeManager = {
@@ -30,6 +38,46 @@ export type SafeManager = {
   createdAt: Date
   updatedAt: Date
   departments: DepartmentSummary[]
+  teamUserCount: number
+}
+
+export const MANAGER_USER_DEFAULT_SCREENS = ['dashboard', 'departments'] as const
+
+export type ManagerUserRecord = {
+  id: string
+  name: string
+  email: string
+  role: 'MANAGER_USER'
+  status: 'ACTIVE' | 'INACTIVE'
+  phone: string | null
+  designation: string | null
+  createdAt: Date
+  updatedAt: Date
+  managerId: string | null
+  manager: {
+    id: string
+    name: string
+    email: string
+    status: 'ACTIVE' | 'INACTIVE'
+    managedDepartments: DepartmentSummary[]
+  } | null
+  allowedScreens: unknown
+}
+
+export type SafeManagerUser = {
+  id: string
+  name: string
+  email: string
+  role: 'MANAGER_USER'
+  status: 'ACTIVE' | 'INACTIVE'
+  phone: string | null
+  designation: string | null
+  createdAt: Date
+  updatedAt: Date
+  managerId: string | null
+  manager: ManagerSummary | null
+  departments: DepartmentSummary[]
+  allowedScreens: string[]
 }
 
 export const SUB_ADMIN_SCREEN_OPTIONS = [
@@ -87,6 +135,35 @@ export function toSafeManager(user: ManagerRecord): SafeManager {
     createdAt,
     updatedAt,
     departments: user.managedDepartments,
+    teamUserCount: user.teamUserCount ?? 0,
+  }
+}
+
+export function toSafeManagerUser(user: ManagerUserRecord): SafeManagerUser {
+  const { id, name, email, status, phone, designation, createdAt, updatedAt, managerId, manager } =
+    user
+
+  return {
+    id,
+    name,
+    email,
+    role: 'MANAGER_USER',
+    status,
+    phone,
+    designation,
+    createdAt,
+    updatedAt,
+    managerId,
+    manager: manager
+      ? {
+          id: manager.id,
+          name: manager.name,
+          email: manager.email,
+          status: manager.status,
+        }
+      : null,
+    departments: manager?.managedDepartments ?? [],
+    allowedScreens: normalizeAllowedScreens(user.allowedScreens),
   }
 }
 

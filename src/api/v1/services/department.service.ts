@@ -1,6 +1,7 @@
 import { HTTP_STATUS } from '../../../constant/index.js'
 import { prisma } from '../../../lib/prisma.js'
 import { AppError } from '../../../utils/app-error.js'
+import { getUserAccessContext, isAdminRole, type CurrentUserRole } from './user.access.js'
 import {
   isPrismaUniqueConstraintError,
   normalizeDepartmentAccent,
@@ -52,13 +53,22 @@ async function findDepartmentById(departmentId: string): Promise<DepartmentRecor
   })
 }
 
-function isAdmin(role?: string) {
-  return role === 'ADMIN'
-}
+export async function listDepartmentsService(userId: string, role?: CurrentUserRole) {
+  const accessContext = await getUserAccessContext(userId, role)
 
-export async function listDepartmentsService(role?: string) {
   const departments = await prisma.department.findMany({
-    where: isAdmin(role) ? undefined : { isActive: true },
+    where: isAdminRole(role)
+      ? undefined
+      : {
+          isActive: true,
+          ...(accessContext.accessibleDepartmentIds
+            ? {
+                id: {
+                  in: accessContext.accessibleDepartmentIds,
+                },
+              }
+            : {}),
+        },
     orderBy: [
       {
         isActive: 'desc',
@@ -73,14 +83,27 @@ export async function listDepartmentsService(role?: string) {
   return departments.map((department: DepartmentRecord) => toSafeDepartment(department))
 }
 
-export async function getDepartmentService(departmentId: string, role?: string) {
+export async function getDepartmentService(
+  departmentId: string,
+  userId: string,
+  role?: CurrentUserRole
+) {
+  const accessContext = await getUserAccessContext(userId, role)
   const department = await findDepartmentById(departmentId)
 
   if (!department) {
     return null
   }
 
-  if (!isAdmin(role) && !department.isActive) {
+  if (!isAdminRole(role) && !department.isActive) {
+    return null
+  }
+
+  if (
+    !isAdminRole(role) &&
+    accessContext.accessibleDepartmentIds &&
+    !accessContext.accessibleDepartmentIds.includes(department.id)
+  ) {
     return null
   }
 

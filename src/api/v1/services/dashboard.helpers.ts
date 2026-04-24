@@ -1,45 +1,30 @@
-import { prisma } from '../../../lib/prisma.js'
+import { getUserAccessContext, isAdminRole, type CurrentUserRole } from './user.access.js'
 
-type CurrentUserRole = 'ADMIN' | 'MANAGER' | 'SUB_ADMIN'
+export { isAdminRole, type CurrentUserRole } from './user.access.js'
 
 export async function getAccessibleDepartmentIds(userId: string, role?: CurrentUserRole) {
-  if (role === 'ADMIN') {
+  const accessContext = await getUserAccessContext(userId, role)
+
+  if (isAdminRole(role)) {
     return null
   }
 
-  const user = await prisma.user.findUnique({
-    where: {
-      id: userId,
-    },
-    select: {
-      status: true,
-      managedDepartments: {
-        select: {
-          id: true,
-        },
-      },
-    },
-  })
-
-  if (!user || user.status !== 'ACTIVE') {
-    return []
-  }
-
-  return user.managedDepartments.map((department: { id: string }) => department.id)
+  return accessContext.accessibleDepartmentIds ?? []
 }
 
-export function isAdminRole(role?: CurrentUserRole) {
-  return role === 'ADMIN'
-}
-
-export function buildLeadScopeWhere(accessibleDepartmentIds: string[] | null) {
-  if (!accessibleDepartmentIds) {
+export function buildLeadScopeWhere(accessibleDepartmentIds: string[] | null, createdById?: string) {
+  if (!accessibleDepartmentIds && !createdById) {
     return {}
   }
 
   return {
-    departmentId: {
-      in: accessibleDepartmentIds,
-    },
+    ...(accessibleDepartmentIds
+      ? {
+          departmentId: {
+            in: accessibleDepartmentIds,
+          },
+        }
+      : {}),
+    ...(createdById ? { createdById } : {}),
   }
 }

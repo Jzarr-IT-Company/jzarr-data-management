@@ -21,6 +21,12 @@ type DepartmentSummary = {
 type PrismaUserWithDepartments = PrismaUser & {
   managedDepartments?: DepartmentSummary[]
   allowedScreens?: unknown
+  managerId?: string | null
+  manager?: {
+    id: string
+    status: 'ACTIVE' | 'INACTIVE'
+    managedDepartments?: DepartmentSummary[]
+  } | null
 }
 
 export type SafeUser = Pick<
@@ -29,6 +35,7 @@ export type SafeUser = Pick<
 > & {
   departments: DepartmentSummary[]
   allowedScreens: string[]
+  managerId: string | null
 }
 
 function normalizeAllowedScreens(value: unknown) {
@@ -43,6 +50,9 @@ function normalizeAllowedScreens(value: unknown) {
 
 export function toSafeUser(user: PrismaUserWithDepartments): SafeUser {
   const { id, name, email, role, status, designation } = user
+  const departments = user.managedDepartments?.length
+    ? user.managedDepartments
+    : user.manager?.managedDepartments ?? []
 
   return {
     id,
@@ -51,8 +61,9 @@ export function toSafeUser(user: PrismaUserWithDepartments): SafeUser {
     role,
     status,
     designation,
-    departments: user.managedDepartments || [],
+    departments,
     allowedScreens: normalizeAllowedScreens(user.allowedScreens),
+    managerId: user.managerId ?? user.manager?.id ?? null,
   }
 }
 
@@ -66,6 +77,7 @@ export function createAccessToken(user: PrismaUser) {
     email: user.email,
     role: user.role,
     name: user.name,
+    managerId: (user as PrismaUserWithDepartments).managerId ?? (user as PrismaUserWithDepartments).manager?.id ?? null,
     allowedScreens: normalizeAllowedScreens((user as PrismaUserWithDepartments).allowedScreens),
   })
 }

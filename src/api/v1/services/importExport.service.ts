@@ -20,7 +20,7 @@ import {
   type LeadStatusValue,
 } from './lead.helpers.js'
 
-type CurrentUserRole = 'ADMIN' | 'MANAGER' | 'SUB_ADMIN'
+type CurrentUserRole = 'ADMIN' | 'MANAGER' | 'MANAGER_USER' | 'SUB_ADMIN'
 
 type ImportRowError = {
   row: number

@@ -12,7 +12,7 @@ import {
   type ReportQuery,
 } from './report.helpers.js'
 
-type CurrentUserRole = 'ADMIN' | 'MANAGER' | 'SUB_ADMIN'
+type CurrentUserRole = 'ADMIN' | 'MANAGER' | 'MANAGER_USER' | 'SUB_ADMIN'
 
 type ReportLeadRow = LeadRecord
 
@@ -28,6 +28,7 @@ const REPORT_LEAD_SELECT = {
   address: true,
   message: true,
   status: true,
+  createdById: true,
   createdAt: true,
   updatedAt: true,
   department: {
@@ -42,12 +43,14 @@ const REPORT_LEAD_SELECT = {
     select: {
       id: true,
       name: true,
+      email: true,
     },
   },
   updatedBy: {
     select: {
       id: true,
       name: true,
+      email: true,
     },
   },
 } as const

@@ -5,13 +5,14 @@ declare global {
     interface Request {
       user?: {
         id: string
-        role: UserRole
-        email: string
-        name: string
-        allowedScreens?: string[]
-      }
+      role: UserRole
+      email: string
+      name: string
+      managerId?: string | null
+      allowedScreens?: string[]
     }
   }
+}
 }
 
 export {}

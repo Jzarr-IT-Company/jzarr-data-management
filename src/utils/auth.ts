@@ -10,6 +10,7 @@ export type AuthTokenPayload = {
   email: string
   role: UserRole
   name: string
+  managerId?: string | null
   allowedScreens?: string[]
 }
 
