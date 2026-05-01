@@ -7,6 +7,7 @@ import { getUserAccessContext, type CurrentUserRole } from './user.access.js'
 import {
   generateLeadReferenceNo,
   isPrismaUniqueConstraintError,
+  leadStatusValues,
   normalizeLeadPhone,
   normalizeLeadStatus,
   normalizeOptionalText,
@@ -14,7 +15,6 @@ import {
   toSafeLead,
   type LeadRecord,
   type LeadStatusValue,
-  leadStatusValues,
 } from './lead.helpers.js'
 
 type LeadListQuery = {
@@ -33,6 +33,8 @@ type LeadPayload = {
   address?: string | null
   message?: string | null
   status?: LeadStatusValue
+  followUpAt?: string | null
+  followUpMessage?: string | null
   departmentId: string
 }
 
@@ -46,6 +48,8 @@ type UpdateLeadPayload = {
   address?: string | null
   status?: LeadStatusValue
   message: string
+  followUpAt?: string | null
+  followUpMessage?: string | null
   departmentId?: string
 }
 
@@ -59,6 +63,10 @@ type LeadCreatePayload = {
   address: string | null
   message: string | null
   status: LeadStatusValue
+  followUpAt: Date | null
+  followUpMessage: string | null
+  followUpNotifiedAt: Date | null
+  followUpCreatedById: string | null
   departmentId: string
   createdById: string
   updatedById: string
@@ -75,6 +83,10 @@ type NormalizedLeadUpdatePayload = {
   departmentId?: string
   status: LeadStatusValue
   message: string
+  followUpAt: Date | null
+  followUpMessage: string | null
+  followUpNotifiedAt: Date | null
+  followUpCreatedById: string | null
 }
 
 const LEAD_SELECT = {
@@ -89,6 +101,10 @@ const LEAD_SELECT = {
   address: true,
   message: true,
   status: true,
+  followUpAt: true,
+  followUpMessage: true,
+  followUpNotifiedAt: true,
+  followUpCreatedById: true,
   createdAt: true,
   updatedAt: true,
   createdById: true,
@@ -108,6 +124,13 @@ const LEAD_SELECT = {
     },
   },
   updatedBy: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+  },
+  followUpCreatedBy: {
     select: {
       id: true,
       name: true,
@@ -145,7 +168,7 @@ async function getAccessContext(userId: string, role?: CurrentUserRole) {
 async function ensureLeadDepartmentAccess(
   userId: string,
   role: CurrentUserRole | undefined,
-  departmentId: string
+  departmentId: string,
 ) {
   const { accessibleDepartmentIds } = await getAccessContext(userId, role)
 
@@ -181,7 +204,7 @@ function buildLeadWhereClause(
   query: LeadListQuery,
   accessibleDepartmentIds: string[] | null,
   userId?: string,
-  ownLeadOnly?: boolean
+  ownLeadOnly?: boolean,
 ) {
   const where: Record<string, unknown> = {}
   const status = normalizeLeadStatus(query.status)
@@ -235,7 +258,7 @@ async function createLeadActivity(
   leadId: string,
   userId: string | null,
   action: string,
-  note?: string
+  note?: string,
 ) {
   await client.leadActivity.create({
     data: {
@@ -247,10 +270,7 @@ async function createLeadActivity(
   })
 }
 
-async function createLeadWithReference(
-  client: LeadTransactionClient,
-  data: LeadCreatePayload
-) {
+async function createLeadWithReference(client: LeadTransactionClient, data: LeadCreatePayload) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const createData = {
@@ -278,7 +298,7 @@ async function createLeadWithReference(
   throw new AppError('Could not generate a unique lead reference number', HTTP_STATUS.CONFLICT)
 }
 
-function normalizeLeadCreatePayload(payload: LeadPayload) {
+function normalizeLeadCreatePayload(payload: LeadPayload): LeadCreatePayload {
   return {
     name: normalizeRequiredText(payload.name),
     fatherName: normalizeOptionalText(payload.fatherName),
@@ -289,11 +309,59 @@ function normalizeLeadCreatePayload(payload: LeadPayload) {
     address: normalizeOptionalText(payload.address),
     message: normalizeOptionalText(payload.message),
     status: payload.status ?? 'NEW',
+    followUpAt: payload.followUpAt ? new Date(payload.followUpAt) : null,
+    followUpMessage: normalizeOptionalText(payload.followUpMessage),
+    followUpNotifiedAt: null,
+    followUpCreatedById: null,
     departmentId: payload.departmentId,
+    createdById: '',
+    updatedById: '',
   }
 }
 
-function normalizeLeadAdminUpdatePayload(payload: UpdateLeadPayload, currentLead: LeadRecord): NormalizedLeadUpdatePayload {
+function normalizeLeadFollowUpPayload(
+  payload: Pick<UpdateLeadPayload, 'followUpAt' | 'followUpMessage' | 'status'>,
+  currentLead: LeadRecord,
+  userId: string,
+) {
+  if (payload.status !== 'FOLLOW_UP') {
+    return {
+      followUpAt: null,
+      followUpMessage: null,
+      followUpNotifiedAt: null,
+      followUpCreatedById: null,
+    }
+  }
+
+  const nextFollowUpAt =
+    payload.followUpAt !== undefined && payload.followUpAt !== null
+      ? new Date(payload.followUpAt)
+      : currentLead.followUpAt
+  const nextFollowUpMessage =
+    payload.followUpMessage !== undefined
+      ? normalizeOptionalText(payload.followUpMessage)
+      : currentLead.followUpMessage
+
+  return {
+    followUpAt: nextFollowUpAt,
+    followUpMessage: nextFollowUpMessage,
+    followUpNotifiedAt:
+      currentLead.status === 'FOLLOW_UP' &&
+      currentLead.followUpAt?.getTime() === nextFollowUpAt?.getTime() &&
+      currentLead.followUpCreatedById === userId
+        ? currentLead.followUpNotifiedAt
+        : null,
+    followUpCreatedById: userId,
+  }
+}
+
+function normalizeLeadAdminUpdatePayload(
+  payload: UpdateLeadPayload,
+  currentLead: LeadRecord,
+  userId: string,
+): NormalizedLeadUpdatePayload {
+  const followUp = normalizeLeadFollowUpPayload(payload, currentLead, userId)
+
   return {
     name: normalizeRequiredText(payload.name ?? currentLead.name),
     fatherName:
@@ -312,13 +380,27 @@ function normalizeLeadAdminUpdatePayload(payload: UpdateLeadPayload, currentLead
     message: normalizeRequiredText(payload.message),
     status: payload.status ?? currentLead.status,
     departmentId: payload.departmentId ?? currentLead.department.id,
+    followUpAt: followUp.followUpAt,
+    followUpMessage: followUp.followUpMessage,
+    followUpNotifiedAt: followUp.followUpNotifiedAt,
+    followUpCreatedById: followUp.followUpCreatedById,
   }
 }
 
-function normalizeLeadManagerUpdatePayload(payload: UpdateLeadPayload, currentLead: LeadRecord): NormalizedLeadUpdatePayload {
+function normalizeLeadManagerUpdatePayload(
+  payload: UpdateLeadPayload,
+  currentLead: LeadRecord,
+  userId: string,
+): NormalizedLeadUpdatePayload {
+  const followUp = normalizeLeadFollowUpPayload(payload, currentLead, userId)
+
   return {
     status: payload.status ?? currentLead.status,
     message: normalizeRequiredText(payload.message),
+    followUpAt: followUp.followUpAt,
+    followUpMessage: followUp.followUpMessage,
+    followUpNotifiedAt: followUp.followUpNotifiedAt,
+    followUpCreatedById: followUp.followUpCreatedById,
   }
 }
 
@@ -350,10 +432,10 @@ function buildLeadHistoryEntry(
       historyParts.push(`City changed to ${nextLead.city || 'Not provided'}`)
     }
     if ('address' in nextLead && nextLead.address !== currentLead.address) {
-      historyParts.push(`Address updated`)
+      historyParts.push('Address updated')
     }
     if ('departmentId' in nextLead && nextLead.departmentId !== currentLead.department.id) {
-      historyParts.push(`Department changed`)
+      historyParts.push('Department changed')
     }
   }
 
@@ -362,13 +444,34 @@ function buildLeadHistoryEntry(
     action = 'STATUS_UPDATED'
   }
 
+  if (nextLead.status === 'FOLLOW_UP') {
+    const followUpAtText = nextLead.followUpAt
+      ? new Intl.DateTimeFormat('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+        }).format(nextLead.followUpAt)
+      : 'Not scheduled'
+
+    if (nextLead.followUpAt?.getTime() !== currentLead.followUpAt?.getTime()) {
+      historyParts.push(`Follow-up scheduled for ${followUpAtText}`)
+      action = 'FOLLOW_UP_SCHEDULED'
+    }
+
+    if (nextLead.followUpMessage !== currentLead.followUpMessage) {
+      historyParts.push(`Follow-up note updated: ${nextLead.followUpMessage || 'Not provided'}`)
+      action = action === 'FOLLOW_UP_SCHEDULED' ? action : 'FOLLOW_UP_UPDATED'
+    }
+  } else if (currentLead.followUpAt || currentLead.followUpMessage) {
+    historyParts.push('Follow-up reminder cleared')
+    action = 'FOLLOW_UP_CLEARED'
+  }
+
   if (nextLead.message !== (currentLead.message ?? '')) {
     historyParts.push(nextLead.message)
     action = action === 'STATUS_UPDATED' ? 'STATUS_AND_MESSAGE_UPDATED' : 'MESSAGE_UPDATED'
-  }
-
-  if (isAdmin(role) && historyParts.length > 0 && action === 'UPDATED') {
-    action = 'UPDATED'
   }
 
   return {
@@ -380,14 +483,14 @@ function buildLeadHistoryEntry(
 export async function listLeadsService(
   userId: string,
   role: CurrentUserRole | undefined,
-  query: LeadListQuery
+  query: LeadListQuery,
 ) {
   const accessContext = await getAccessContext(userId, role)
   const where = buildLeadWhereClause(
     query,
     accessContext.accessibleDepartmentIds,
     userId,
-    accessContext.ownLeadOnly
+    accessContext.ownLeadOnly,
   )
 
   const leads = await prisma.lead.findMany({
@@ -427,7 +530,7 @@ export async function getLeadService(userId: string, role: CurrentUserRole | und
 export async function createLeadService(
   userId: string,
   role: CurrentUserRole | undefined,
-  payload: LeadPayload
+  payload: LeadPayload,
 ) {
   const normalizedPayload = normalizeLeadCreatePayload(payload)
 
@@ -435,15 +538,25 @@ export async function createLeadService(
     throw new AppError('Invalid lead status', HTTP_STATUS.BAD_REQUEST)
   }
 
+  if (normalizedPayload.status === 'FOLLOW_UP') {
+    if (!normalizedPayload.followUpAt || !normalizedPayload.followUpMessage) {
+      throw new AppError('Follow-up date, time, and message are required', HTTP_STATUS.BAD_REQUEST)
+    }
+    normalizedPayload.followUpCreatedById = userId
+  } else {
+    normalizedPayload.followUpAt = null
+    normalizedPayload.followUpMessage = null
+    normalizedPayload.followUpCreatedById = null
+  }
+
+  normalizedPayload.createdById = userId
+  normalizedPayload.updatedById = userId
+
   await ensureLeadDepartmentAccess(userId, role, normalizedPayload.departmentId)
 
   try {
     const lead = await prisma.$transaction(async (transaction: Prisma.TransactionClient) => {
-      const createdLead = await createLeadWithReference(transaction, {
-        ...normalizedPayload,
-        createdById: userId,
-        updatedById: userId,
-      })
+      const createdLead = await createLeadWithReference(transaction, normalizedPayload)
 
       await createLeadActivity(transaction, createdLead.id, userId, 'CREATED', 'Lead created')
 
@@ -464,7 +577,7 @@ export async function updateLeadService(
   userId: string,
   role: CurrentUserRole | undefined,
   leadId: string,
-  payload: UpdateLeadPayload
+  payload: UpdateLeadPayload,
 ) {
   const lead = await findLeadById(leadId)
 
@@ -486,11 +599,15 @@ export async function updateLeadService(
   }
 
   const normalizedPayload = isAdmin(role)
-    ? normalizeLeadAdminUpdatePayload(payload, lead)
-    : normalizeLeadManagerUpdatePayload(payload, lead)
+    ? normalizeLeadAdminUpdatePayload(payload, lead, userId)
+    : normalizeLeadManagerUpdatePayload(payload, lead, userId)
 
   if (!leadStatusValues.includes(normalizedPayload.status)) {
     throw new AppError('Invalid lead status', HTTP_STATUS.BAD_REQUEST)
+  }
+
+  if (normalizedPayload.status === 'FOLLOW_UP' && (!normalizedPayload.followUpAt || !normalizedPayload.followUpMessage)) {
+    throw new AppError('Follow-up date, time, and message are required', HTTP_STATUS.BAD_REQUEST)
   }
 
   if (isAdmin(role) && normalizedPayload.departmentId) {
@@ -511,11 +628,21 @@ export async function updateLeadService(
             message: normalizedPayload.message,
             status: normalizedPayload.status,
             departmentId: normalizedPayload.departmentId,
+            followUpAt: normalizedPayload.followUpAt,
+            followUpMessage: normalizedPayload.followUpMessage,
+            followUpNotifiedAt: normalizedPayload.followUpNotifiedAt,
+            followUpCreatedById:
+              normalizedPayload.status === 'FOLLOW_UP' ? userId : null,
             updatedById: userId,
           }
         : {
             message: normalizedPayload.message,
             status: normalizedPayload.status,
+            followUpAt: normalizedPayload.followUpAt,
+            followUpMessage: normalizedPayload.followUpMessage,
+            followUpNotifiedAt: normalizedPayload.followUpNotifiedAt,
+            followUpCreatedById:
+              normalizedPayload.status === 'FOLLOW_UP' ? userId : null,
             updatedById: userId,
           }
 
@@ -527,15 +654,11 @@ export async function updateLeadService(
         select: LEAD_SELECT,
       })
 
-      const historyEntry = buildLeadHistoryEntry(
-        lead,
-        normalizedPayload,
-        role,
-      )
+      const historyEntry = buildLeadHistoryEntry(lead, normalizedPayload, role)
 
       await createLeadActivity(
         transaction,
-        leadRecord.id,
+        leadId,
         userId,
         historyEntry.action,
         historyEntry.note,

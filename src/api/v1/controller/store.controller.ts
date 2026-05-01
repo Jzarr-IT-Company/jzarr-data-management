@@ -10,8 +10,10 @@ import {
   listStoresService,
   updateStoreService,
   updateStoreStatusService,
+  uploadStoreFilesService,
   upsertStoreStatService,
 } from '../services/store.service.js'
+import type { StoreFileCategory } from '../services/store.helpers.js'
 
 function getStoreIdParam(req: Request) {
   const storeId = req.params.storeId
@@ -112,6 +114,84 @@ export async function deleteStoreController(req: Request, res: Response) {
   }
 
   return res.status(HTTP_STATUS.OK).json(successResponse('Store deleted'))
+}
+
+function normalizeStoreFileCategory(value: unknown): StoreFileCategory | null {
+  const category = String(value || '').trim().toUpperCase()
+
+  if (category === 'AUDIT' || category === 'DOCUMENT' || category === 'PRODUCT_PSD') {
+    return category
+  }
+
+  return null
+}
+
+function getFileExtension(fileName: string) {
+  const match = fileName.toLowerCase().match(/\.([a-z0-9]+)$/)
+  return match?.[1] || ''
+}
+
+function isAllowedStoreFile(category: StoreFileCategory, file: Express.Multer.File) {
+  const extension = getFileExtension(file.originalname)
+  const mimeType = file.mimetype.toLowerCase()
+
+  if (category === 'AUDIT') {
+    return ['csv', 'xls', 'xlsx'].includes(extension)
+  }
+
+  if (category === 'DOCUMENT') {
+    return (
+      ['jpg', 'jpeg', 'png', 'pdf'].includes(extension) &&
+      ['image/jpeg', 'image/png', 'application/pdf'].includes(mimeType)
+    )
+  }
+
+  return extension === 'psd'
+}
+
+export async function uploadStoreFilesController(req: Request, res: Response) {
+  const storeId = getStoreIdParam(req)
+  const category = normalizeStoreFileCategory(req.body?.category)
+
+  if (!storeId) {
+    return res
+      .status(HTTP_STATUS.BAD_REQUEST)
+      .json(errorResponse('Store id is required', HTTP_STATUS.BAD_REQUEST))
+  }
+
+  if (!category) {
+    return res
+      .status(HTTP_STATUS.BAD_REQUEST)
+      .json(errorResponse('Valid file category is required', HTTP_STATUS.BAD_REQUEST))
+  }
+
+  const files = Array.isArray(req.files) ? req.files : []
+
+  if (!files.length) {
+    return res
+      .status(HTTP_STATUS.BAD_REQUEST)
+      .json(errorResponse('At least one file is required', HTTP_STATUS.BAD_REQUEST))
+  }
+
+  if (files.some((file) => !isAllowedStoreFile(category, file))) {
+    return res
+      .status(HTTP_STATUS.BAD_REQUEST)
+      .json(errorResponse('One or more files are not allowed for this upload category', HTTP_STATUS.BAD_REQUEST))
+  }
+
+  const uploadedFiles = await uploadStoreFilesService(
+    req.user!.id,
+    req.user?.role,
+    storeId,
+    category,
+    files,
+  )
+
+  if (!uploadedFiles) {
+    return res.status(HTTP_STATUS.NOT_FOUND).json(errorResponse('Store not found', HTTP_STATUS.NOT_FOUND))
+  }
+
+  return res.status(HTTP_STATUS.CREATED).json(successResponse('Store files uploaded', uploadedFiles))
 }
 
 export async function upsertStoreStatController(req: Request, res: Response) {

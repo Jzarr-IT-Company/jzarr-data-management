@@ -1,8 +1,7 @@
 import { Router } from 'express'
 
 import { authMiddleware } from '../middleware/auth.middleware.js'
-import { requireRoles } from '../middleware/role.middleware.js'
-import { requireScreens } from '../middleware/screen.middleware.js'
+import { requireScreenAccess, requireScreens } from '../middleware/screen.middleware.js'
 import { validationMiddleware } from '../middleware/validation.middleware.js'
 import {
   createManagerController,
@@ -76,41 +75,41 @@ usersRouter.delete('/managers/:managerId', requireScreens('managers'), deleteMan
 
 usersRouter.get(
   '/managers/:managerId/users',
-  requireRoles('ADMIN', 'MANAGER'),
+  requireScreenAccess('managers', ['ADMIN', 'MANAGER', 'SUB_ADMIN']),
   listManagerUsersController
 )
 usersRouter.post(
   '/managers/:managerId/users',
-  requireRoles('ADMIN'),
+  requireScreenAccess('managers', ['ADMIN', 'SUB_ADMIN']),
   validationMiddleware(createManagerUserSchema),
   createManagerUserController
 )
 usersRouter.get(
   '/managers/:managerId/users/:managerUserId',
-  requireRoles('ADMIN'),
+  requireScreenAccess('managers', ['ADMIN', 'SUB_ADMIN']),
   getManagerUserController
 )
 usersRouter.patch(
   '/managers/:managerId/users/:managerUserId',
-  requireRoles('ADMIN'),
+  requireScreenAccess('managers', ['ADMIN', 'SUB_ADMIN']),
   validationMiddleware(updateManagerUserSchema),
   updateManagerUserController
 )
 usersRouter.patch(
   '/managers/:managerId/users/:managerUserId/status',
-  requireRoles('ADMIN'),
+  requireScreenAccess('managers', ['ADMIN', 'SUB_ADMIN']),
   validationMiddleware(updateManagerUserStatusSchema),
   updateManagerUserStatusController
 )
 usersRouter.patch(
   '/managers/:managerId/users/:managerUserId/password',
-  requireRoles('ADMIN'),
+  requireScreenAccess('managers', ['ADMIN', 'SUB_ADMIN']),
   validationMiddleware(resetManagerUserPasswordSchema),
   resetManagerUserPasswordController
 )
 usersRouter.delete(
   '/managers/:managerId/users/:managerUserId',
-  requireRoles('ADMIN'),
+  requireScreenAccess('managers', ['ADMIN', 'SUB_ADMIN']),
   deleteManagerUserController
 )
 

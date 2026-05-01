@@ -1,5 +1,6 @@
 import { HTTP_STATUS } from '../../../constant/index.js'
 import { prisma } from '../../../lib/prisma.js'
+import { uploadStoreFileToSpaces } from '../../../lib/spaces-storage.js'
 import { AppError } from '../../../utils/app-error.js'
 import {
   buildStoreReportCsv,
@@ -13,6 +14,7 @@ import {
   toSafeStoreStat,
   toStoreReportPayload,
   type SafeStore,
+  type StoreFileCategory,
   type StoreRecord,
   type StoreReportRange,
 } from './store.helpers.js'
@@ -28,6 +30,18 @@ type StorePayload = {
   url: string
   departmentId: string
   isActive?: boolean
+  amazonHolderName?: string | null
+  sellerAccountGmail?: string | null
+  sellerAccountPassword?: string | null
+  sellerAccountAddress?: string | null
+  userAccountGmail?: string | null
+  userAccountPassword?: string | null
+  userManagingMemberName?: string | null
+  inventory?: number | string | null
+  recordDate?: string | null
+  assignCode?: string | null
+  costOfGoods?: number | string | null
+  ppcSpending?: number | string | null
 }
 
 type UpdateStorePayload = Partial<StorePayload>
@@ -54,29 +68,34 @@ type StoreStatRecord = {
 }
 
 type StoreModelClient = {
-  findUnique: (...args: any[]) => Promise<StoreRecord | null>
-  findMany: (...args: any[]) => Promise<StoreRecord[]>
-  create: (...args: any[]) => Promise<StoreRecord>
-  update: (...args: any[]) => Promise<StoreRecord>
-  delete: (...args: any[]) => Promise<StoreRecord | null>
+  findUnique: (...args: unknown[]) => Promise<StoreRecord | null>
+  findMany: (...args: unknown[]) => Promise<StoreRecord[]>
+  create: (...args: unknown[]) => Promise<StoreRecord>
+  update: (...args: unknown[]) => Promise<StoreRecord>
+  delete: (...args: unknown[]) => Promise<StoreRecord | null>
 }
 
 type StoreStatModelClient = {
-  findMany: (...args: any[]) => Promise<StoreStatRecord[]>
-  upsert: (...args: any[]) => Promise<StoreStatRecord>
+  findMany: (...args: unknown[]) => Promise<StoreStatRecord[]>
+  upsert: (...args: unknown[]) => Promise<StoreStatRecord>
+}
+
+type StoreFileModelClient = {
+  create: (...args: unknown[]) => Promise<StoreRecord['files'] extends Array<infer T> ? T : never>
 }
 
 type StoreTransactionClient = {
   store: StoreModelClient
   storeStat: StoreStatModelClient
+  storeFile: StoreFileModelClient
 }
 
 type StorePrismaClient = {
   user: {
-    findUnique: (...args: any[]) => Promise<{ status: string; managedDepartments: { id: string }[] } | null>
+    findUnique: (...args: unknown[]) => Promise<{ status: string; managedDepartments: { id: string }[] } | null>
   }
   department: {
-    findUnique: (...args: any[]) => Promise<{
+    findUnique: (...args: unknown[]) => Promise<{
       id: string
       name: string
       code: string
@@ -86,6 +105,7 @@ type StorePrismaClient = {
   }
   store: StoreModelClient
   storeStat: StoreStatModelClient
+  storeFile: StoreFileModelClient
   $transaction: <T>(fn: (transaction: StoreTransactionClient) => Promise<T>) => Promise<T>
 }
 
@@ -96,6 +116,18 @@ const STORE_SELECT = {
   name: true,
   url: true,
   isActive: true,
+  amazonHolderName: true,
+  sellerAccountGmail: true,
+  sellerAccountPassword: true,
+  sellerAccountAddress: true,
+  userAccountGmail: true,
+  userAccountPassword: true,
+  userManagingMemberName: true,
+  inventory: true,
+  recordDate: true,
+  assignCode: true,
+  costOfGoods: true,
+  ppcSpending: true,
   createdAt: true,
   updatedAt: true,
   department: {
@@ -139,6 +171,28 @@ const STORE_SELECT = {
         },
       },
       updatedBy: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+  },
+  files: {
+    orderBy: {
+      createdAt: 'desc',
+    },
+    select: {
+      id: true,
+      storeId: true,
+      category: true,
+      originalName: true,
+      mimeType: true,
+      size: true,
+      key: true,
+      url: true,
+      createdAt: true,
+      uploadedBy: {
         select: {
           id: true,
           name: true,
@@ -276,6 +330,18 @@ function normalizeStorePayload(payload: StorePayload) {
     url: normalizeStoreUrl(payload.url),
     departmentId: payload.departmentId,
     isActive: payload.isActive ?? true,
+    amazonHolderName: normalizeOptionalText(payload.amazonHolderName),
+    sellerAccountGmail: normalizeOptionalText(payload.sellerAccountGmail),
+    sellerAccountPassword: normalizeOptionalText(payload.sellerAccountPassword),
+    sellerAccountAddress: normalizeOptionalText(payload.sellerAccountAddress),
+    userAccountGmail: normalizeOptionalText(payload.userAccountGmail),
+    userAccountPassword: normalizeOptionalText(payload.userAccountPassword),
+    userManagingMemberName: normalizeOptionalText(payload.userManagingMemberName),
+    inventory: normalizeOptionalInteger(payload.inventory),
+    recordDate: normalizeOptionalDate(payload.recordDate),
+    assignCode: normalizeOptionalText(payload.assignCode),
+    costOfGoods: normalizeOptionalMoney(payload.costOfGoods),
+    ppcSpending: normalizeOptionalMoney(payload.ppcSpending),
   }
 }
 
@@ -285,7 +351,87 @@ function normalizeStoreUpdatePayload(payload: UpdateStorePayload, currentStore: 
     url: payload.url !== undefined ? normalizeStoreUrl(payload.url) : currentStore.url,
     departmentId: payload.departmentId ?? currentStore.department.id,
     isActive: payload.isActive ?? currentStore.isActive,
+    amazonHolderName:
+      payload.amazonHolderName !== undefined
+        ? normalizeOptionalText(payload.amazonHolderName)
+        : currentStore.amazonHolderName,
+    sellerAccountGmail:
+      payload.sellerAccountGmail !== undefined
+        ? normalizeOptionalText(payload.sellerAccountGmail)
+        : currentStore.sellerAccountGmail,
+    sellerAccountPassword:
+      payload.sellerAccountPassword !== undefined
+        ? normalizeOptionalText(payload.sellerAccountPassword)
+        : currentStore.sellerAccountPassword,
+    sellerAccountAddress:
+      payload.sellerAccountAddress !== undefined
+        ? normalizeOptionalText(payload.sellerAccountAddress)
+        : currentStore.sellerAccountAddress,
+    userAccountGmail:
+      payload.userAccountGmail !== undefined
+        ? normalizeOptionalText(payload.userAccountGmail)
+        : currentStore.userAccountGmail,
+    userAccountPassword:
+      payload.userAccountPassword !== undefined
+        ? normalizeOptionalText(payload.userAccountPassword)
+        : currentStore.userAccountPassword,
+    userManagingMemberName:
+      payload.userManagingMemberName !== undefined
+        ? normalizeOptionalText(payload.userManagingMemberName)
+        : currentStore.userManagingMemberName,
+    inventory:
+      payload.inventory !== undefined
+        ? normalizeOptionalInteger(payload.inventory)
+        : currentStore.inventory,
+    recordDate:
+      payload.recordDate !== undefined ? normalizeOptionalDate(payload.recordDate) : currentStore.recordDate,
+    assignCode:
+      payload.assignCode !== undefined ? normalizeOptionalText(payload.assignCode) : currentStore.assignCode,
+    costOfGoods:
+      payload.costOfGoods !== undefined ? normalizeOptionalMoney(payload.costOfGoods) : currentStore.costOfGoods,
+    ppcSpending:
+      payload.ppcSpending !== undefined ? normalizeOptionalMoney(payload.ppcSpending) : currentStore.ppcSpending,
   }
+}
+
+function normalizeOptionalText(value?: string | null) {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const trimmed = value.trim()
+  return trimmed.length ? trimmed : null
+}
+
+function normalizeOptionalInteger(value?: number | string | null) {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+
+  return Math.max(0, Math.trunc(Number(value) || 0))
+}
+
+function normalizeOptionalMoney(value?: number | string | null) {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+
+  return Math.max(0, Number(value) || 0)
+}
+
+function normalizeOptionalDate(value?: string | Date | null) {
+  if (!value) {
+    return null
+  }
+
+  const date = value instanceof Date ? new Date(value.getTime()) : new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    throw new AppError('Invalid store date', HTTP_STATUS.BAD_REQUEST)
+  }
+
+  date.setUTCHours(0, 0, 0, 0)
+  return date
 }
 
 function normalizeStatPayload(payload: StoreStatPayload) {
@@ -468,6 +614,18 @@ export async function updateStoreService(
         name: normalizedPayload.name,
         url: normalizedPayload.url,
         isActive: normalizedPayload.isActive,
+        amazonHolderName: normalizedPayload.amazonHolderName,
+        sellerAccountGmail: normalizedPayload.sellerAccountGmail,
+        sellerAccountPassword: normalizedPayload.sellerAccountPassword,
+        sellerAccountAddress: normalizedPayload.sellerAccountAddress,
+        userAccountGmail: normalizedPayload.userAccountGmail,
+        userAccountPassword: normalizedPayload.userAccountPassword,
+        userManagingMemberName: normalizedPayload.userManagingMemberName,
+        inventory: normalizedPayload.inventory,
+        recordDate: normalizedPayload.recordDate,
+        assignCode: normalizedPayload.assignCode,
+        costOfGoods: normalizedPayload.costOfGoods,
+        ppcSpending: normalizedPayload.ppcSpending,
         departmentId: normalizedPayload.departmentId,
         updatedById: userId,
       },
@@ -511,6 +669,59 @@ export async function deleteStoreService(
   })
 
   return true
+}
+
+export async function uploadStoreFilesService(
+  userId: string,
+  role: CurrentUserRole | undefined,
+  storeId: string,
+  category: StoreFileCategory,
+  files: Express.Multer.File[],
+) {
+  const store = await getStoreWithScope(userId, role, storeId)
+
+  if (!store) {
+    return null
+  }
+
+  const uploadedFiles: unknown[] = []
+
+  for (const file of files) {
+    const uploaded = await uploadStoreFileToSpaces(storeId, category, file)
+    const record = await storePrisma.storeFile.create({
+      data: {
+        storeId,
+        category,
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        size: file.size,
+        key: uploaded.key,
+        url: uploaded.url,
+        uploadedById: userId,
+      },
+      select: {
+        id: true,
+        storeId: true,
+        category: true,
+        originalName: true,
+        mimeType: true,
+        size: true,
+        key: true,
+        url: true,
+        createdAt: true,
+        uploadedBy: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    })
+
+    uploadedFiles.push(record)
+  }
+
+  return uploadedFiles
 }
 
 export async function upsertStoreStatService(

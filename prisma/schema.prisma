@@ -23,11 +23,13 @@ model User {
   manager            User?          @relation("ManagerTeam", fields: [managerId], references: [id], onDelete: SetNull)
   createdLeads       Lead[]         @relation("CreatedLeads")
   updatedLeads       Lead[]         @relation("UpdatedLeads")
+  followUpCreatedLeads Lead[]       @relation("LeadFollowUpCreatedBy")
   leadActivities     LeadActivity[]
   notifications      Notification[]
   refreshTokens      RefreshToken[]
   createdStores      Store[]        @relation("CreatedStores")
   updatedStores      Store[]        @relation("UpdatedStores")
+  uploadedStoreFiles StoreFile[]
   createdStoreStats  StoreStat[]    @relation("CreatedStoreStats")
   updatedStoreStats  StoreStat[]    @relation("UpdatedStoreStats")
   createdTasks       Task[]         @relation("CreatedTasks")
@@ -65,17 +67,25 @@ model Lead {
   address      String?
   message      String?
   status       LeadStatus     @default(NEW)
+  followUpAt   DateTime?
+  followUpMessage String?
+  followUpNotifiedAt DateTime?
+  followUpCreatedById String?
   departmentId String
   createdById  String?
   updatedById  String?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   createdBy    User?          @relation("CreatedLeads", fields: [createdById], references: [id])
+  followUpCreatedBy User?     @relation("LeadFollowUpCreatedBy", fields: [followUpCreatedById], references: [id], onDelete: SetNull)
   department   Department     @relation(fields: [departmentId], references: [id])
   updatedBy    User?          @relation("UpdatedLeads", fields: [updatedById], references: [id])
+  notifications Notification[]
   activities   LeadActivity[]
 
   @@index([departmentId, status])
+  @@index([followUpAt, followUpNotifiedAt])
+  @@index([followUpCreatedById])
   @@index([createdById], map: "Lead_createdById_fkey")
   @@index([updatedById], map: "Lead_updatedById_fkey")
 }
@@ -100,6 +110,18 @@ model Store {
   name         String
   url          String
   isActive     Boolean     @default(true)
+  amazonHolderName String?
+  sellerAccountGmail String?
+  sellerAccountPassword String?
+  sellerAccountAddress String?
+  userAccountGmail String?
+  userAccountPassword String?
+  userManagingMemberName String?
+  inventory Int?
+  recordDate DateTime?
+  assignCode String?
+  costOfGoods Decimal?
+  ppcSpending Decimal?
   createdById  String?
   updatedById  String?
   createdAt    DateTime    @default(now())
@@ -107,6 +129,7 @@ model Store {
   createdBy    User?       @relation("CreatedStores", fields: [createdById], references: [id])
   department   Department  @relation(fields: [departmentId], references: [id], onDelete: Cascade)
   updatedBy    User?       @relation("UpdatedStores", fields: [updatedById], references: [id])
+  files        StoreFile[]
   stats        StoreStat[]
 
   @@unique([departmentId, name])
@@ -114,6 +137,24 @@ model Store {
   @@index([departmentId, isActive])
   @@index([createdById], map: "Store_createdById_fkey")
   @@index([updatedById], map: "Store_updatedById_fkey")
+}
+
+model StoreFile {
+  id           String   @id @default(cuid())
+  storeId      String
+  category     StoreFileCategory
+  originalName String
+  mimeType     String
+  size         Int
+  key          String   @unique
+  url          String
+  uploadedById String?
+  createdAt    DateTime @default(now())
+  store        Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id])
+
+  @@index([storeId, category])
+  @@index([uploadedById])
 }
 
 model StoreStat {
@@ -170,6 +211,7 @@ model Notification {
   id        String    @id @default(cuid())
   userId    String
   taskId    String?
+  leadId    String?
   type      String
   title     String
   message   String
@@ -177,10 +219,12 @@ model Notification {
   readAt    DateTime?
   createdAt DateTime  @default(now())
   task      Task?     @relation(fields: [taskId], references: [id])
+  lead      Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead, createdAt])
   @@index([taskId], map: "Notification_taskId_fkey")
+  @@index([leadId])
 }
 
 model RefreshToken {
@@ -210,6 +254,7 @@ enum UserStatus {
 enum LeadStatus {
   NEW
   IN_PROGRESS
+  FOLLOW_UP
   CONVERTED
   NOT_INTERESTED
 }
@@ -226,4 +271,10 @@ enum TaskPriority {
   MEDIUM
   HIGH
   URGENT
+}
+
+enum StoreFileCategory {
+  AUDIT
+  DOCUMENT
+  PRODUCT_PSD
 }

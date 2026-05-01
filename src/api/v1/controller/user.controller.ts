@@ -45,6 +45,16 @@ function getManagerUserIdParam(req: Request) {
   return managerUserId.trim()
 }
 
+function getSubAdminIdParam(req: Request) {
+  const subAdminId = req.params.subAdminId
+
+  if (typeof subAdminId !== 'string') {
+    return undefined
+  }
+
+  return subAdminId.trim()
+}
+
 export async function listManagersController(_req: Request, res: Response) {
   const managers = await listManagersService()
 
@@ -353,7 +363,7 @@ export async function createSubAdminController(req: Request, res: Response) {
 }
 
 export async function getSubAdminController(req: Request, res: Response) {
-  const subAdminId = getManagerIdParam(req)
+  const subAdminId = getSubAdminIdParam(req)
 
   if (!subAdminId) {
     return res
@@ -373,7 +383,7 @@ export async function getSubAdminController(req: Request, res: Response) {
 }
 
 export async function updateSubAdminController(req: Request, res: Response) {
-  const subAdminId = getManagerIdParam(req)
+  const subAdminId = getSubAdminIdParam(req)
 
   if (!subAdminId) {
     return res
@@ -393,7 +403,7 @@ export async function updateSubAdminController(req: Request, res: Response) {
 }
 
 export async function updateSubAdminStatusController(req: Request, res: Response) {
-  const subAdminId = getManagerIdParam(req)
+  const subAdminId = getSubAdminIdParam(req)
 
   if (!subAdminId) {
     return res
@@ -414,7 +424,7 @@ export async function updateSubAdminStatusController(req: Request, res: Response
 }
 
 export async function resetSubAdminPasswordController(req: Request, res: Response) {
-  const subAdminId = getManagerIdParam(req)
+  const subAdminId = getSubAdminIdParam(req)
 
   if (!subAdminId) {
     return res
@@ -437,7 +447,7 @@ export async function resetSubAdminPasswordController(req: Request, res: Respons
 }
 
 export async function deleteSubAdminController(req: Request, res: Response) {
-  const subAdminId = getManagerIdParam(req)
+  const subAdminId = getSubAdminIdParam(req)
 
   if (!subAdminId) {
     return res

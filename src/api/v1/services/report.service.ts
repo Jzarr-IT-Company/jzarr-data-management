@@ -28,6 +28,10 @@ const REPORT_LEAD_SELECT = {
   address: true,
   message: true,
   status: true,
+  followUpAt: true,
+  followUpMessage: true,
+  followUpNotifiedAt: true,
+  followUpCreatedById: true,
   createdById: true,
   createdAt: true,
   updatedAt: true,
@@ -47,6 +51,13 @@ const REPORT_LEAD_SELECT = {
     },
   },
   updatedBy: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+  },
+  followUpCreatedBy: {
     select: {
       id: true,
       name: true,

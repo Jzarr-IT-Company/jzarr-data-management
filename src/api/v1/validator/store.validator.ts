@@ -7,6 +7,18 @@ export const createStoreSchema = z.object({
   url: z.string().trim().url(),
   departmentId: z.string().trim().min(1),
   isActive: z.boolean().optional(),
+  amazonHolderName: z.string().trim().optional().nullable(),
+  sellerAccountGmail: z.string().trim().email().optional().nullable(),
+  sellerAccountPassword: z.string().trim().optional().nullable(),
+  sellerAccountAddress: z.string().trim().optional().nullable(),
+  userAccountGmail: z.string().trim().email().optional().nullable(),
+  userAccountPassword: z.string().trim().optional().nullable(),
+  userManagingMemberName: z.string().trim().optional().nullable(),
+  inventory: z.coerce.number().int().min(0).optional().nullable(),
+  recordDate: z.string().trim().optional().nullable(),
+  assignCode: z.string().trim().regex(/^[a-z0-9-]+$/i).optional().nullable(),
+  costOfGoods: z.coerce.number().min(0).optional().nullable(),
+  ppcSpending: z.coerce.number().min(0).optional().nullable(),
 })
 
 export const updateStoreSchema = z.object({
@@ -14,6 +26,18 @@ export const updateStoreSchema = z.object({
   url: z.string().trim().url().optional(),
   departmentId: z.string().trim().min(1).optional(),
   isActive: z.boolean().optional(),
+  amazonHolderName: z.string().trim().optional().nullable(),
+  sellerAccountGmail: z.string().trim().email().optional().nullable(),
+  sellerAccountPassword: z.string().trim().optional().nullable(),
+  sellerAccountAddress: z.string().trim().optional().nullable(),
+  userAccountGmail: z.string().trim().email().optional().nullable(),
+  userAccountPassword: z.string().trim().optional().nullable(),
+  userManagingMemberName: z.string().trim().optional().nullable(),
+  inventory: z.coerce.number().int().min(0).optional().nullable(),
+  recordDate: z.string().trim().optional().nullable(),
+  assignCode: z.string().trim().regex(/^[a-z0-9-]+$/i).optional().nullable(),
+  costOfGoods: z.coerce.number().min(0).optional().nullable(),
+  ppcSpending: z.coerce.number().min(0).optional().nullable(),
 })
 
 export const updateStoreStatusSchema = z.object({

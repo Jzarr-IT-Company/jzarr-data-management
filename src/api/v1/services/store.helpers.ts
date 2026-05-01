@@ -27,16 +27,44 @@ export type StoreStatRecord = {
   updatedBy: PersonSummary | null
 }
 
+export type StoreFileCategory = 'AUDIT' | 'DOCUMENT' | 'PRODUCT_PSD'
+
+export type StoreFileRecord = {
+  id: string
+  storeId: string
+  category: StoreFileCategory
+  originalName: string
+  mimeType: string
+  size: number
+  key: string
+  url: string
+  uploadedBy: PersonSummary | null
+  createdAt: Date
+}
+
 export type StoreRecord = {
   id: string
   name: string
   url: string
   isActive: boolean
+  amazonHolderName: string | null
+  sellerAccountGmail: string | null
+  sellerAccountPassword: string | null
+  sellerAccountAddress: string | null
+  userAccountGmail: string | null
+  userAccountPassword: string | null
+  userManagingMemberName: string | null
+  inventory: number | null
+  recordDate: Date | null
+  assignCode: string | null
+  costOfGoods: unknown
+  ppcSpending: unknown
   createdAt: Date
   updatedAt: Date
   department: DepartmentSummary
   createdBy: PersonSummary | null
   updatedBy: PersonSummary | null
+  files?: StoreFileRecord[]
   stats?: StoreStatRecord[]
   _count?: {
     stats: number
@@ -61,11 +89,24 @@ export type SafeStore = {
   name: string
   url: string
   isActive: boolean
+  amazonHolderName: string | null
+  sellerAccountGmail: string | null
+  sellerAccountPassword: string | null
+  sellerAccountAddress: string | null
+  userAccountGmail: string | null
+  userAccountPassword: string | null
+  userManagingMemberName: string | null
+  inventory: number | null
+  recordDate: Date | null
+  assignCode: string | null
+  costOfGoods: number
+  ppcSpending: number
   createdAt: Date
   updatedAt: Date
   department: DepartmentSummary
   createdBy: PersonSummary | null
   updatedBy: PersonSummary | null
+  files: StoreFileRecord[]
   statsCount: number
   latestStat: SafeStoreStat | null
   stats: SafeStoreStat[]
@@ -150,11 +191,24 @@ export function toSafeStore(store: StoreRecord): SafeStore {
     name: store.name,
     url: store.url,
     isActive: store.isActive,
+    amazonHolderName: store.amazonHolderName,
+    sellerAccountGmail: store.sellerAccountGmail,
+    sellerAccountPassword: store.sellerAccountPassword,
+    sellerAccountAddress: store.sellerAccountAddress,
+    userAccountGmail: store.userAccountGmail,
+    userAccountPassword: store.userAccountPassword,
+    userManagingMemberName: store.userManagingMemberName,
+    inventory: store.inventory,
+    recordDate: store.recordDate,
+    assignCode: store.assignCode,
+    costOfGoods: normalizeMoney(store.costOfGoods),
+    ppcSpending: normalizeMoney(store.ppcSpending),
     createdAt: store.createdAt,
     updatedAt: store.updatedAt,
     department: store.department,
     createdBy: store.createdBy,
     updatedBy: store.updatedBy,
+    files: store.files || [],
     statsCount: store._count?.stats ?? stats.length,
     latestStat: stats[0] ?? null,
     stats,

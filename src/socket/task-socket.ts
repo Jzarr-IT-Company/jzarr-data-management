@@ -15,6 +15,18 @@ type TaskSocketEvent = {
   departmentId?: string
 }
 
+type NotificationSocketEvent = {
+  id: string
+  taskId: string | null
+  leadId: string | null
+  type: string
+  title: string
+  message: string
+  isRead: boolean
+  readAt: Date | null
+  createdAt: Date
+}
+
 type ConnectedUser = {
   id: string
   role: UserRole
@@ -71,6 +83,10 @@ function emitToRoom(room: string, event: string, payload: TaskSocketEvent) {
   io?.to(room).emit(event, payload)
 }
 
+function emitNotificationToRoom(room: string, payload: NotificationSocketEvent) {
+  io?.to(room).emit('notification:event', payload)
+}
+
 export function emitTaskCreatedEvent(
   task: TaskSocketEvent,
   managerId: string,
@@ -92,4 +108,11 @@ export function emitTaskStatusEvent(task: TaskSocketEvent, managerId: string) {
 export function emitTaskDeletedEvent(task: TaskSocketEvent, managerId: string) {
   emitToRoom(`user:${managerId}`, 'task:event', task)
   emitToRoom('role:ADMIN', 'task:event', task)
+}
+
+export function emitNotificationCreatedEvent(
+  notification: NotificationSocketEvent,
+  recipientId: string,
+) {
+  emitNotificationToRoom(`user:${recipientId}`, notification)
 }

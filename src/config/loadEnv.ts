@@ -25,6 +25,12 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(1),
   JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),
   JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
+  AWS_ACCESS_KEY_ID: z.string().optional(),
+  AWS_SECRET_ACCESS_KEY: z.string().optional(),
+  AWS_S3_BUCKET_NAME: z.string().optional(),
+  AWS_S3_REGION: z.string().optional(),
+  AWS_S3_DOMAIN: z.string().optional(),
+  AWS_S3_ENDPOINT: z.string().optional(),
 })
 
 export const env = envSchema.parse(process.env)

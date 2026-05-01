@@ -54,10 +54,11 @@ export function normalizeReportStatus(status?: string | null): LeadStatusValue |
     return null
   }
 
-  const normalized = status.trim().toUpperCase()
+  const normalized = status.trim().toUpperCase().replace(/\s+/g, '_')
+  const statusAlias = normalized === 'NEW_LEAD' ? 'NEW' : normalized
 
-  return leadStatusValues.includes(normalized as LeadStatusValue)
-    ? (normalized as LeadStatusValue)
+  return leadStatusValues.includes(statusAlias as LeadStatusValue)
+    ? (statusAlias as LeadStatusValue)
     : null
 }
 
@@ -172,16 +173,6 @@ function normalizePdfText(value: string) {
     .replace(/\(/g, '\\(')
     .replace(/\)/g, '\\)')
     .replace(/[^\x20-\x7E]/g, '?')
-}
-
-function buildPdfContent(lines: { text: string; x: number; y: number; size?: number; font?: 'F1' | 'F2' }[]) {
-  return lines
-    .map((line) => {
-      const font = line.font || 'F1'
-      const size = line.size || 11
-      return `BT\n/${font} ${size} Tf\n${line.x} ${line.y} Td\n(${normalizePdfText(line.text)}) Tj\nET`
-    })
-    .join('\n')
 }
 
 function buildPdfDocument(content: string) {

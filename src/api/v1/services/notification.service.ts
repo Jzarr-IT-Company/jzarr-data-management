@@ -7,6 +7,7 @@ type CurrentUserRole = 'ADMIN' | 'MANAGER' | 'MANAGER_USER' | 'SUB_ADMIN'
 type NotificationListItem = {
   id: string
   taskId: string | null
+  leadId: string | null
   type: string
   title: string
   message: string
@@ -18,6 +19,12 @@ type NotificationListItem = {
     title: string
     status: string
     priority: string
+  } | null
+  lead: {
+    id: string
+    referenceNo: string
+    name: string
+    status: string
   } | null
 }
 
@@ -37,6 +44,7 @@ export async function listNotificationsService(userId: string, role: CurrentUser
     select: {
       id: true,
       taskId: true,
+      leadId: true,
       type: true,
       title: true,
       message: true,
@@ -49,6 +57,14 @@ export async function listNotificationsService(userId: string, role: CurrentUser
           title: true,
           status: true,
           priority: true,
+        },
+      },
+      lead: {
+        select: {
+          id: true,
+          referenceNo: true,
+          name: true,
+          status: true,
         },
       },
     },

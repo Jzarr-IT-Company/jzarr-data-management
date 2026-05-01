@@ -1,4 +1,4 @@
-export const leadStatusValues = ['NEW', 'IN_PROGRESS', 'CONVERTED', 'NOT_INTERESTED'] as const
+export const leadStatusValues = ['NEW', 'IN_PROGRESS', 'FOLLOW_UP', 'CONVERTED', 'NOT_INTERESTED'] as const
 
 export type LeadStatusValue = (typeof leadStatusValues)[number]
 
@@ -35,12 +35,17 @@ export type LeadRecord = {
   address: string | null
   message: string | null
   status: LeadStatusValue
+  followUpAt: Date | null
+  followUpMessage: string | null
+  followUpNotifiedAt: Date | null
+  followUpCreatedById: string | null
   createdAt: Date
   updatedAt: Date
   createdById: string | null
   department: DepartmentSummary
   createdBy: PersonSummary | null
   updatedBy: PersonSummary | null
+  followUpCreatedBy: PersonSummary | null
   activities?: LeadActivityRecord[]
 }
 
@@ -58,11 +63,16 @@ export type SafeLead = {
   address: string | null
   message: string | null
   status: LeadStatusValue
+  followUpAt: Date | null
+  followUpMessage: string | null
+  followUpNotifiedAt: Date | null
+  followUpCreatedById: string | null
   createdAt: Date
   updatedAt: Date
   department: DepartmentSummary
   createdBy: PersonSummary | null
   updatedBy: PersonSummary | null
+  followUpCreatedBy: PersonSummary | null
   activities: LeadActivityRecord[]
 }
 
@@ -79,11 +89,16 @@ export function toSafeLead(lead: LeadRecord): SafeLead {
     address,
     message,
     status,
+    followUpAt,
+    followUpMessage,
+    followUpNotifiedAt,
+    followUpCreatedById,
     createdAt,
     updatedAt,
     department,
     createdBy,
     updatedBy,
+    followUpCreatedBy,
     activities = [],
   } = lead
 
@@ -99,11 +114,16 @@ export function toSafeLead(lead: LeadRecord): SafeLead {
     address,
     message,
     status,
+    followUpAt,
+    followUpMessage,
+    followUpNotifiedAt,
+    followUpCreatedById,
     createdAt,
     updatedAt,
     department,
     createdBy,
     updatedBy,
+    followUpCreatedBy,
     activities,
   }
 }

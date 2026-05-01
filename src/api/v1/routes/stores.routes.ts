@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import multer from 'multer'
 
 import { authMiddleware } from '../middleware/auth.middleware.js'
 import { requireScreenAccess } from '../middleware/screen.middleware.js'
@@ -13,6 +14,7 @@ import {
   listStoresController,
   updateStoreController,
   updateStoreStatusController,
+  uploadStoreFilesController,
   upsertStoreStatController,
 } from '../controller/store.controller.js'
 import {
@@ -23,6 +25,13 @@ import {
 } from '../validator/store.validator.js'
 
 export const storesRouter = Router()
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 25 * 1024 * 1024,
+    files: 10,
+  },
+})
 
 storesRouter.use(authMiddleware, requireRoles('ADMIN', 'MANAGER', 'SUB_ADMIN'))
 
@@ -42,6 +51,12 @@ storesRouter.get(
   '/:storeId/report/export',
   requireScreenAccess('departments', ['ADMIN', 'MANAGER']),
   exportStoreReportController
+)
+storesRouter.post(
+  '/:storeId/files',
+  requireScreenAccess('departments', ['ADMIN', 'MANAGER']),
+  upload.array('files', 10),
+  uploadStoreFilesController,
 )
 storesRouter.get('/:storeId', requireScreenAccess('departments', ['ADMIN', 'MANAGER']), getStoreController)
 storesRouter.patch(
