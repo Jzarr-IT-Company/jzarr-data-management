@@ -2,10 +2,16 @@ node_modules
 dist
 .env
 .env.*
+.env.local
+.env.development
+.env.development.local
+.env.production
+.env.production.local
+.env.test
+.env.test.local
 !.env.example
 prisma/dev.sqlite
 coverage
 seeders/user.seed.js
-env.*
 logs/
 reports/
