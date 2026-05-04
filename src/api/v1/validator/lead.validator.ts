@@ -3,7 +3,8 @@ import { z } from 'zod'
 import { leadStatusValues } from '../services/lead.helpers.js'
 
 const nullableText = z.string().trim().min(1).nullable().optional()
-const followUpDateTime = z.string().datetime({ offset: true })
+const nullableFollowUpDateTime = z.string().datetime({ offset: true }).nullable().optional()
+const nullableFollowUpMessage = z.string().trim().min(1).nullable().optional()
 
 function withFollowUpValidation<T extends z.ZodTypeAny>(schema: T) {
   return schema.superRefine((data, ctx) => {
@@ -38,34 +39,34 @@ function withFollowUpValidation<T extends z.ZodTypeAny>(schema: T) {
 
 export const createLeadSchema = withFollowUpValidation(
   z.object({
-  name: z.string().trim().min(2),
-  fatherName: nullableText,
-  email: nullableText,
-  phone: z.string().trim().min(5),
-  whatsapp: nullableText,
-  city: nullableText,
-  address: nullableText,
-  message: nullableText,
-  status: z.enum(leadStatusValues).optional(),
-  departmentId: z.string().trim().min(1),
-  followUpAt: followUpDateTime.optional(),
-  followUpMessage: z.string().trim().min(1).optional(),
+    name: z.string().trim().min(2),
+    fatherName: nullableText,
+    email: nullableText,
+    phone: z.string().trim().min(5),
+    whatsapp: nullableText,
+    city: nullableText,
+    address: nullableText,
+    message: nullableText,
+    status: z.enum(leadStatusValues).optional(),
+    departmentId: z.string().trim().min(1),
+    followUpAt: nullableFollowUpDateTime,
+    followUpMessage: nullableFollowUpMessage,
   })
 )
 
 export const updateLeadSchema = withFollowUpValidation(
   z.object({
-  name: z.string().trim().min(2).optional(),
-  fatherName: nullableText,
-  email: nullableText,
-  phone: z.string().trim().min(5).optional(),
-  whatsapp: nullableText,
-  city: nullableText,
-  address: nullableText,
-  message: z.string().trim().min(1),
-  status: z.enum(leadStatusValues),
-  departmentId: z.string().trim().min(1).optional(),
-  followUpAt: followUpDateTime.optional(),
-  followUpMessage: z.string().trim().min(1).optional(),
+    name: z.string().trim().min(2).optional(),
+    fatherName: nullableText,
+    email: nullableText,
+    phone: z.string().trim().min(5).optional(),
+    whatsapp: nullableText,
+    city: nullableText,
+    address: nullableText,
+    message: z.string().trim().min(1),
+    status: z.enum(leadStatusValues),
+    departmentId: z.string().trim().min(1).optional(),
+    followUpAt: nullableFollowUpDateTime,
+    followUpMessage: nullableFollowUpMessage,
   })
 )
