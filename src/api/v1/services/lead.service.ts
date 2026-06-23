@@ -545,7 +545,7 @@ export async function listLeadsService(
     select: LEAD_SELECT,
   })
 
-  return leads.map((lead: LeadRecord) => toSafeLead(lead))
+  return (leads as unknown as LeadRecord[]).map((lead) => toSafeLead(lead))
 }
 
 export async function getLeadService(userId: string, role: CurrentUserRole | undefined, leadId: string) {
@@ -749,7 +749,11 @@ export async function deleteLeadService(userId: string, role: CurrentUserRole | 
     throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
   }
 
-  if (accessContext.ownLeadOnly && lead.createdById !== userId) {
+  if (
+    accessContext.accessibleCreatorIds &&
+    lead.createdById !== null &&
+    !accessContext.accessibleCreatorIds.includes(lead.createdById)
+  ) {
     throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
   }
 

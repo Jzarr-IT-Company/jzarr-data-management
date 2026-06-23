@@ -33,6 +33,10 @@ const REPORT_LEAD_SELECT = {
   followUpNotifiedAt: true,
   followUpCreatedById: true,
   createdById: true,
+  serviceId: true,
+  totalAmount: true,
+  receivingAmount: true,
+  pendingAmount: true,
   createdAt: true,
   updatedAt: true,
   department: {
@@ -62,6 +66,12 @@ const REPORT_LEAD_SELECT = {
       id: true,
       name: true,
       email: true,
+    },
+  },
+  service: {
+    select: {
+      id: true,
+      name: true,
     },
   },
 } as const
@@ -125,7 +135,7 @@ async function loadLeadReportPayload(userId: string, role?: CurrentUserRole, que
     if (group.status === 'NOT_INTERESTED') summary.notInterestedLeads = group._count._all
   }
 
-  const leads = rows.map((lead: ReportLeadRow) => toSafeLead(lead))
+  const leads = (rows as unknown as ReportLeadRow[]).map((lead) => toSafeLead(lead))
 
   const report: LeadReportPayload = {
     filters,
