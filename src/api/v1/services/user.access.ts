@@ -6,10 +6,15 @@ export type CurrentUserRole = 'ADMIN' | 'MANAGER' | 'MANAGER_USER' | 'SUB_ADMIN'
 
 export type UserAccessContext = {
   accessibleDepartmentIds: string[] | null
-  ownLeadOnly: boolean
+  // null = no creator filter (admin); otherwise only leads created by these user IDs are visible
+  accessibleCreatorIds: string[] | null
 }
 
 type DepartmentAccessRecord = {
+  id: string
+}
+
+type TeamUserRecord = {
   id: string
 }
 
@@ -21,7 +26,9 @@ type ManagerAccessRecord = {
 
 type UserAccessRecord = {
   status: 'ACTIVE' | 'INACTIVE'
+  designation: string | null
   managedDepartments: DepartmentAccessRecord[]
+  teamUsers: TeamUserRecord[]
   manager: ManagerAccessRecord | null
 }
 
@@ -36,7 +43,13 @@ async function findUserAccessRecord(userId: string): Promise<UserAccessRecord | 
     },
     select: {
       status: true,
+      designation: true,
       managedDepartments: {
+        select: {
+          id: true,
+        },
+      },
+      teamUsers: {
         select: {
           id: true,
         },
@@ -63,7 +76,7 @@ export async function getUserAccessContext(
   if (isAdminRole(role)) {
     return {
       accessibleDepartmentIds: null,
-      ownLeadOnly: false,
+      accessibleCreatorIds: null,
     }
   }
 
@@ -82,12 +95,26 @@ export async function getUserAccessContext(
 
     return {
       accessibleDepartmentIds: manager.managedDepartments.map((department) => department.id),
-      ownLeadOnly: true,
+      accessibleCreatorIds: [userId],
     }
   }
 
+  // Project Manager sees all leads in their departments (no creator restriction)
+  const isProjectManager =
+    (user.designation || '').toLowerCase() === 'project manager'
+
+  if (isProjectManager) {
+    return {
+      accessibleDepartmentIds: user.managedDepartments.map((department) => department.id),
+      accessibleCreatorIds: null,
+    }
+  }
+
+  // Regular manager sees their own leads and leads created by their team users
+  const teamUserIds = user.teamUsers.map((u) => u.id)
+
   return {
     accessibleDepartmentIds: user.managedDepartments.map((department) => department.id),
-    ownLeadOnly: false,
+    accessibleCreatorIds: [userId, ...teamUserIds],
   }
 }

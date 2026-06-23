@@ -36,6 +36,10 @@ type LeadPayload = {
   followUpAt?: string | null
   followUpMessage?: string | null
   departmentId: string
+  serviceId?: string | null
+  totalAmount?: number | null
+  receivingAmount?: number | null
+  pendingAmount?: number | null
 }
 
 type UpdateLeadPayload = {
@@ -51,6 +55,10 @@ type UpdateLeadPayload = {
   followUpAt?: string | null
   followUpMessage?: string | null
   departmentId?: string
+  serviceId?: string | null
+  totalAmount?: number | null
+  receivingAmount?: number | null
+  pendingAmount?: number | null
 }
 
 type LeadCreatePayload = {
@@ -68,6 +76,10 @@ type LeadCreatePayload = {
   followUpNotifiedAt: Date | null
   followUpCreatedById: string | null
   departmentId: string
+  serviceId: string | null
+  totalAmount: number | null
+  receivingAmount: number | null
+  pendingAmount: number | null
   createdById: string
   updatedById: string
 }
@@ -87,6 +99,10 @@ type NormalizedLeadUpdatePayload = {
   followUpMessage: string | null
   followUpNotifiedAt: Date | null
   followUpCreatedById: string | null
+  serviceId?: string | null
+  totalAmount?: number | null
+  receivingAmount?: number | null
+  pendingAmount?: number | null
 }
 
 const LEAD_SELECT = {
@@ -105,6 +121,10 @@ const LEAD_SELECT = {
   followUpMessage: true,
   followUpNotifiedAt: true,
   followUpCreatedById: true,
+  serviceId: true,
+  totalAmount: true,
+  receivingAmount: true,
+  pendingAmount: true,
   createdAt: true,
   updatedAt: true,
   createdById: true,
@@ -114,6 +134,12 @@ const LEAD_SELECT = {
       name: true,
       code: true,
       accent: true,
+    },
+  },
+  service: {
+    select: {
+      id: true,
+      name: true,
     },
   },
   createdBy: {
@@ -203,8 +229,7 @@ async function findLeadById(leadId: string): Promise<LeadRecord | null> {
 function buildLeadWhereClause(
   query: LeadListQuery,
   accessibleDepartmentIds: string[] | null,
-  userId?: string,
-  ownLeadOnly?: boolean,
+  accessibleCreatorIds: string[] | null,
 ) {
   const where: Record<string, unknown> = {}
   const status = normalizeLeadStatus(query.status)
@@ -222,13 +247,11 @@ function buildLeadWhereClause(
 
     where.departmentId = departmentId
   } else if (accessibleDepartmentIds) {
-    where.departmentId = {
-      in: accessibleDepartmentIds,
-    }
+    where.departmentId = { in: accessibleDepartmentIds }
   }
 
-  if (ownLeadOnly && userId) {
-    where.createdById = userId
+  if (accessibleCreatorIds) {
+    where.createdById = { in: accessibleCreatorIds }
   }
 
   if (status) {
@@ -299,6 +322,11 @@ async function createLeadWithReference(client: LeadTransactionClient, data: Lead
 }
 
 function normalizeLeadCreatePayload(payload: LeadPayload): LeadCreatePayload {
+  const totalAmount = payload.totalAmount != null ? Number(payload.totalAmount) : null
+  const receivingAmount = payload.receivingAmount != null ? Number(payload.receivingAmount) : null
+  const pendingAmount =
+    totalAmount != null && receivingAmount != null ? totalAmount - receivingAmount : null
+
   return {
     name: normalizeRequiredText(payload.name),
     fatherName: normalizeOptionalText(payload.fatherName),
@@ -314,6 +342,10 @@ function normalizeLeadCreatePayload(payload: LeadPayload): LeadCreatePayload {
     followUpNotifiedAt: null,
     followUpCreatedById: null,
     departmentId: payload.departmentId,
+    serviceId: payload.serviceId ?? null,
+    totalAmount,
+    receivingAmount,
+    pendingAmount,
     createdById: '',
     updatedById: '',
   }
@@ -362,6 +394,15 @@ function normalizeLeadAdminUpdatePayload(
 ): NormalizedLeadUpdatePayload {
   const followUp = normalizeLeadFollowUpPayload(payload, currentLead, userId)
 
+  const nextTotalAmount =
+    payload.totalAmount !== undefined ? (payload.totalAmount != null ? Number(payload.totalAmount) : null) : (currentLead.totalAmount ?? null)
+  const nextReceivingAmount =
+    payload.receivingAmount !== undefined ? (payload.receivingAmount != null ? Number(payload.receivingAmount) : null) : (currentLead.receivingAmount ?? null)
+  const nextPendingAmount =
+    nextTotalAmount != null && nextReceivingAmount != null
+      ? nextTotalAmount - nextReceivingAmount
+      : null
+
   return {
     name: normalizeRequiredText(payload.name ?? currentLead.name),
     fatherName:
@@ -384,6 +425,10 @@ function normalizeLeadAdminUpdatePayload(
     followUpMessage: followUp.followUpMessage,
     followUpNotifiedAt: followUp.followUpNotifiedAt,
     followUpCreatedById: followUp.followUpCreatedById,
+    serviceId: payload.serviceId !== undefined ? (payload.serviceId ?? null) : (currentLead.serviceId ?? null),
+    totalAmount: nextTotalAmount,
+    receivingAmount: nextReceivingAmount,
+    pendingAmount: nextPendingAmount,
   }
 }
 
@@ -489,8 +534,7 @@ export async function listLeadsService(
   const where = buildLeadWhereClause(
     query,
     accessContext.accessibleDepartmentIds,
-    userId,
-    accessContext.ownLeadOnly,
+    accessContext.accessibleCreatorIds,
   )
 
   const leads = await prisma.lead.findMany({
@@ -520,7 +564,11 @@ export async function getLeadService(userId: string, role: CurrentUserRole | und
     throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
   }
 
-  if (accessContext.ownLeadOnly && lead.createdById !== userId) {
+  if (
+    accessContext.accessibleCreatorIds &&
+    lead.createdById !== null &&
+    !accessContext.accessibleCreatorIds.includes(lead.createdById)
+  ) {
     throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
   }
 
@@ -594,7 +642,11 @@ export async function updateLeadService(
     throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
   }
 
-  if (accessContext.ownLeadOnly && lead.createdById !== userId) {
+  if (
+    accessContext.accessibleCreatorIds &&
+    lead.createdById !== null &&
+    !accessContext.accessibleCreatorIds.includes(lead.createdById)
+  ) {
     throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
   }
 
@@ -633,6 +685,10 @@ export async function updateLeadService(
             followUpNotifiedAt: normalizedPayload.followUpNotifiedAt,
             followUpCreatedById:
               normalizedPayload.status === 'FOLLOW_UP' ? userId : null,
+            serviceId: normalizedPayload.serviceId,
+            totalAmount: normalizedPayload.totalAmount,
+            receivingAmount: normalizedPayload.receivingAmount,
+            pendingAmount: normalizedPayload.pendingAmount,
             updatedById: userId,
           }
         : {

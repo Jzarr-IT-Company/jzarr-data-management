@@ -23,6 +23,11 @@ export type LeadActivityRecord = {
   user: PersonSummary | null
 }
 
+type ServiceSummary = {
+  id: string
+  name: string
+}
+
 export type LeadRecord = {
   id: string
   referenceNo: string
@@ -39,10 +44,15 @@ export type LeadRecord = {
   followUpMessage: string | null
   followUpNotifiedAt: Date | null
   followUpCreatedById: string | null
+  serviceId: string | null
+  totalAmount: number | null
+  receivingAmount: number | null
+  pendingAmount: number | null
   createdAt: Date
   updatedAt: Date
   createdById: string | null
   department: DepartmentSummary
+  service: ServiceSummary | null
   createdBy: PersonSummary | null
   updatedBy: PersonSummary | null
   followUpCreatedBy: PersonSummary | null
@@ -67,9 +77,14 @@ export type SafeLead = {
   followUpMessage: string | null
   followUpNotifiedAt: Date | null
   followUpCreatedById: string | null
+  serviceId: string | null
+  totalAmount: number | null
+  receivingAmount: number | null
+  pendingAmount: number | null
   createdAt: Date
   updatedAt: Date
   department: DepartmentSummary
+  service: ServiceSummary | null
   createdBy: PersonSummary | null
   updatedBy: PersonSummary | null
   followUpCreatedBy: PersonSummary | null
@@ -93,9 +108,14 @@ export function toSafeLead(lead: LeadRecord): SafeLead {
     followUpMessage,
     followUpNotifiedAt,
     followUpCreatedById,
+    serviceId,
+    totalAmount,
+    receivingAmount,
+    pendingAmount,
     createdAt,
     updatedAt,
     department,
+    service,
     createdBy,
     updatedBy,
     followUpCreatedBy,
@@ -118,9 +138,14 @@ export function toSafeLead(lead: LeadRecord): SafeLead {
     followUpMessage,
     followUpNotifiedAt,
     followUpCreatedById,
+    serviceId: serviceId ?? null,
+    totalAmount: totalAmount ?? null,
+    receivingAmount: receivingAmount ?? null,
+    pendingAmount: pendingAmount ?? null,
     createdAt,
     updatedAt,
     department,
+    service: service ?? null,
     createdBy,
     updatedBy,
     followUpCreatedBy,

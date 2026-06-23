@@ -37,6 +37,9 @@ function withFollowUpValidation<T extends z.ZodTypeAny>(schema: T) {
   })
 }
 
+const nullableDecimal = z.number().nullable().optional()
+const nullableServiceId = z.string().trim().min(1).nullable().optional()
+
 export const createLeadSchema = withFollowUpValidation(
   z.object({
     name: z.string().trim().min(2),
@@ -51,6 +54,9 @@ export const createLeadSchema = withFollowUpValidation(
     departmentId: z.string().trim().min(1),
     followUpAt: nullableFollowUpDateTime,
     followUpMessage: nullableFollowUpMessage,
+    serviceId: nullableServiceId,
+    totalAmount: nullableDecimal,
+    receivingAmount: nullableDecimal,
   })
 )
 
@@ -68,5 +74,8 @@ export const updateLeadSchema = withFollowUpValidation(
     departmentId: z.string().trim().min(1).optional(),
     followUpAt: nullableFollowUpDateTime,
     followUpMessage: nullableFollowUpMessage,
+    serviceId: nullableServiceId,
+    totalAmount: nullableDecimal,
+    receivingAmount: nullableDecimal,
   })
 )

@@ -55,37 +55,54 @@ model Department {
   managers  User[]   @relation("ManagedDepartments")
 }
 
+model FilerService {
+  id        String   @id @default(cuid())
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  leads     Lead[]
+
+  @@index([isActive])
+}
+
 model Lead {
-  id           String         @id @default(cuid())
-  referenceNo  String         @unique
-  name         String
-  fatherName   String?
-  email        String?
-  phone        String         @unique
-  whatsapp     String?
-  city         String?
-  address      String?
-  message      String?
-  status       LeadStatus     @default(NEW)
-  followUpAt   DateTime?
-  followUpMessage String?
-  followUpNotifiedAt DateTime?
+  id                  String         @id @default(cuid())
+  referenceNo         String         @unique
+  name                String
+  fatherName          String?
+  email               String?
+  phone               String         @unique
+  whatsapp            String?
+  city                String?
+  address             String?
+  message             String?
+  status              LeadStatus     @default(NEW)
+  followUpAt          DateTime?
+  followUpMessage     String?
+  followUpNotifiedAt  DateTime?
   followUpCreatedById String?
-  departmentId String
-  createdById  String?
-  updatedById  String?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  createdBy    User?          @relation("CreatedLeads", fields: [createdById], references: [id])
-  followUpCreatedBy User?     @relation("LeadFollowUpCreatedBy", fields: [followUpCreatedById], references: [id], onDelete: SetNull)
-  department   Department     @relation(fields: [departmentId], references: [id])
-  updatedBy    User?          @relation("UpdatedLeads", fields: [updatedById], references: [id])
-  notifications Notification[]
-  activities   LeadActivity[]
+  departmentId        String
+  serviceId           String?
+  totalAmount         Decimal?
+  receivingAmount     Decimal?
+  pendingAmount       Decimal?
+  createdById         String?
+  updatedById         String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  createdBy           User?          @relation("CreatedLeads", fields: [createdById], references: [id])
+  followUpCreatedBy   User?          @relation("LeadFollowUpCreatedBy", fields: [followUpCreatedById], references: [id], onDelete: SetNull)
+  department          Department     @relation(fields: [departmentId], references: [id])
+  service             FilerService?  @relation(fields: [serviceId], references: [id])
+  updatedBy           User?          @relation("UpdatedLeads", fields: [updatedById], references: [id])
+  notifications       Notification[]
+  activities          LeadActivity[]
 
   @@index([departmentId, status])
   @@index([followUpAt, followUpNotifiedAt])
   @@index([followUpCreatedById])
+  @@index([serviceId])
   @@index([createdById], map: "Lead_createdById_fkey")
   @@index([updatedById], map: "Lead_updatedById_fkey")
 }
