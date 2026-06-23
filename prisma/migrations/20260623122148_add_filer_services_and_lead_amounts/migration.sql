@@ -1,5 +1,5 @@
 -- AlterTable
-ALTER TABLE `lead` ADD COLUMN `pendingAmount` DECIMAL(65, 30) NULL,
+ALTER TABLE `Lead` ADD COLUMN `pendingAmount` DECIMAL(65, 30) NULL,
     ADD COLUMN `receivingAmount` DECIMAL(65, 30) NULL,
     ADD COLUMN `serviceId` VARCHAR(191) NULL,
     ADD COLUMN `totalAmount` DECIMAL(65, 30) NULL;
