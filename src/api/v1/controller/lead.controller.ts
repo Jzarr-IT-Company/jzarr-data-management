@@ -25,7 +25,7 @@ export async function listLeadsController(req: Request, res: Response) {
     status: typeof req.query.status === 'string' ? req.query.status : undefined,
     departmentId:
       typeof req.query.departmentId === 'string' ? req.query.departmentId : undefined,
-  })
+  }, req.user?.allowedScreens)
 
   return res.status(HTTP_STATUS.OK).json(successResponse('Leads fetched', leads))
 }
@@ -39,7 +39,7 @@ export async function getLeadController(req: Request, res: Response) {
       .json(errorResponse('Lead id is required', HTTP_STATUS.BAD_REQUEST))
   }
 
-  const lead = await getLeadService(req.user!.id, req.user?.role, leadId)
+  const lead = await getLeadService(req.user!.id, req.user?.role, leadId, req.user?.allowedScreens)
 
   if (!lead) {
     return res.status(HTTP_STATUS.NOT_FOUND).json(errorResponse('Lead not found', HTTP_STATUS.NOT_FOUND))
@@ -49,7 +49,7 @@ export async function getLeadController(req: Request, res: Response) {
 }
 
 export async function createLeadController(req: Request, res: Response) {
-  const lead = await createLeadService(req.user!.id, req.user?.role, req.body)
+  const lead = await createLeadService(req.user!.id, req.user?.role, req.body, req.user?.allowedScreens)
 
   return res.status(HTTP_STATUS.CREATED).json(successResponse('Lead created', lead))
 }
@@ -63,7 +63,7 @@ export async function updateLeadController(req: Request, res: Response) {
       .json(errorResponse('Lead id is required', HTTP_STATUS.BAD_REQUEST))
   }
 
-  const lead = await updateLeadService(req.user!.id, req.user?.role, leadId, req.body)
+  const lead = await updateLeadService(req.user!.id, req.user?.role, leadId, req.body, req.user?.allowedScreens)
 
   if (!lead) {
     return res.status(HTTP_STATUS.NOT_FOUND).json(errorResponse('Lead not found', HTTP_STATUS.NOT_FOUND))
@@ -81,7 +81,7 @@ export async function deleteLeadController(req: Request, res: Response) {
       .json(errorResponse('Lead id is required', HTTP_STATUS.BAD_REQUEST))
   }
 
-  const deleted = await deleteLeadService(req.user!.id, req.user?.role, leadId)
+  const deleted = await deleteLeadService(req.user!.id, req.user?.role, leadId, req.user?.allowedScreens)
 
   if (!deleted) {
     return res.status(HTTP_STATUS.NOT_FOUND).json(errorResponse('Lead not found', HTTP_STATUS.NOT_FOUND))

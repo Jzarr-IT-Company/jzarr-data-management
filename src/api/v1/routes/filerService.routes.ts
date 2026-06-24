@@ -1,7 +1,7 @@
 import { Router } from 'express'
 
 import { authMiddleware } from '../middleware/auth.middleware.js'
-import { requireRoles } from '../middleware/role.middleware.js'
+import { requireScreenAccess } from '../middleware/screen.middleware.js'
 import { validationMiddleware } from '../middleware/validation.middleware.js'
 import {
   createFilerServiceController,
@@ -21,21 +21,21 @@ filerServiceRouter.use(authMiddleware)
 // All authenticated roles can list services (needed for the lead form dropdown)
 filerServiceRouter.get('/', listFilerServicesController)
 
-// Only admin can manage services
+// Admin or sub admin with filer-services screen can manage services
 filerServiceRouter.post(
   '/',
-  requireRoles('ADMIN'),
+  requireScreenAccess('filer-services'),
   validationMiddleware(createFilerServiceSchema),
   createFilerServiceController,
 )
 filerServiceRouter.patch(
   '/:serviceId',
-  requireRoles('ADMIN'),
+  requireScreenAccess('filer-services'),
   validationMiddleware(updateFilerServiceSchema),
   updateFilerServiceController,
 )
 filerServiceRouter.delete(
   '/:serviceId',
-  requireRoles('ADMIN'),
+  requireScreenAccess('filer-services'),
   deleteFilerServiceController,
 )

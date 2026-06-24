@@ -187,6 +187,18 @@ function isAdmin(role?: CurrentUserRole) {
   return role === 'ADMIN'
 }
 
+function isSubAdmin(role?: CurrentUserRole) {
+  return role === 'SUB_ADMIN'
+}
+
+function hasLeadPerm(allowedScreens: string[] | undefined, perm: string) {
+  return (allowedScreens ?? []).includes(perm)
+}
+
+function canDoFullLeadUpdate(role?: CurrentUserRole, allowedScreens?: string[]) {
+  return isAdmin(role) || (isSubAdmin(role) && hasLeadPerm(allowedScreens, 'lead:update:full'))
+}
+
 async function getAccessContext(userId: string, role?: CurrentUserRole) {
   return getUserAccessContext(userId, role)
 }
@@ -529,7 +541,12 @@ export async function listLeadsService(
   userId: string,
   role: CurrentUserRole | undefined,
   query: LeadListQuery,
+  allowedScreens?: string[],
 ) {
+  if (isSubAdmin(role) && !hasLeadPerm(allowedScreens, 'lead:read')) {
+    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
+  }
+
   const accessContext = await getAccessContext(userId, role)
   const where = buildLeadWhereClause(
     query,
@@ -548,7 +565,11 @@ export async function listLeadsService(
   return (leads as unknown as LeadRecord[]).map((lead) => toSafeLead(lead))
 }
 
-export async function getLeadService(userId: string, role: CurrentUserRole | undefined, leadId: string) {
+export async function getLeadService(userId: string, role: CurrentUserRole | undefined, leadId: string, allowedScreens?: string[]) {
+  if (isSubAdmin(role) && !hasLeadPerm(allowedScreens, 'lead:read')) {
+    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
+  }
+
   const lead = await findLeadById(leadId)
 
   if (!lead) {
@@ -579,7 +600,11 @@ export async function createLeadService(
   userId: string,
   role: CurrentUserRole | undefined,
   payload: LeadPayload,
+  allowedScreens?: string[],
 ) {
+  if (isSubAdmin(role) && !hasLeadPerm(allowedScreens, 'lead:write')) {
+    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
+  }
   const normalizedPayload = normalizeLeadCreatePayload(payload)
 
   if (!leadStatusValues.includes(normalizedPayload.status)) {
@@ -626,7 +651,11 @@ export async function updateLeadService(
   role: CurrentUserRole | undefined,
   leadId: string,
   payload: UpdateLeadPayload,
+  allowedScreens?: string[],
 ) {
+  if (isSubAdmin(role) && !hasLeadPerm(allowedScreens, 'lead:update:full') && !hasLeadPerm(allowedScreens, 'lead:update:status')) {
+    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
+  }
   const lead = await findLeadById(leadId)
 
   if (!lead) {
@@ -650,7 +679,7 @@ export async function updateLeadService(
     throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
   }
 
-  const normalizedPayload = isAdmin(role)
+  const normalizedPayload = canDoFullLeadUpdate(role, allowedScreens)
     ? normalizeLeadAdminUpdatePayload(payload, lead, userId)
     : normalizeLeadManagerUpdatePayload(payload, lead, userId)
 
@@ -668,7 +697,7 @@ export async function updateLeadService(
 
   try {
     const updatedLead = await prisma.$transaction(async (transaction: Prisma.TransactionClient) => {
-      const data = isAdmin(role)
+      const data = canDoFullLeadUpdate(role, allowedScreens)
         ? {
             name: normalizedPayload.name,
             fatherName: normalizedPayload.fatherName,
@@ -710,7 +739,8 @@ export async function updateLeadService(
         select: LEAD_SELECT,
       })
 
-      const historyEntry = buildLeadHistoryEntry(lead, normalizedPayload, role)
+      const effectiveRole = canDoFullLeadUpdate(role, allowedScreens) ? 'ADMIN' : role
+      const historyEntry = buildLeadHistoryEntry(lead, normalizedPayload, effectiveRole)
 
       await createLeadActivity(
         transaction,
@@ -733,7 +763,10 @@ export async function updateLeadService(
   }
 }
 
-export async function deleteLeadService(userId: string, role: CurrentUserRole | undefined, leadId: string) {
+export async function deleteLeadService(userId: string, role: CurrentUserRole | undefined, leadId: string, allowedScreens?: string[]) {
+  if (isSubAdmin(role) && !hasLeadPerm(allowedScreens, 'lead:delete')) {
+    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
+  }
   const lead = await findLeadById(leadId)
 
   if (!lead) {

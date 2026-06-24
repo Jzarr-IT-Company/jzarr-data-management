@@ -99,6 +99,14 @@ export async function getUserAccessContext(
     }
   }
 
+  // Sub admins see all leads in their assigned departments (no creator restriction)
+  if (role === 'SUB_ADMIN') {
+    return {
+      accessibleDepartmentIds: user.managedDepartments.map((department) => department.id),
+      accessibleCreatorIds: null,
+    }
+  }
+
   // Project Manager sees all leads in their departments (no creator restriction)
   const isProjectManager =
     (user.designation || '').toLowerCase() === 'project manager'

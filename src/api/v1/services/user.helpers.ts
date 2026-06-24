@@ -89,6 +89,12 @@ export const SUB_ADMIN_SCREEN_OPTIONS = [
   'department-setup',
   'import-export',
   'sub-admins',
+  'filer-services',
+  'lead:read',
+  'lead:write',
+  'lead:update:full',
+  'lead:update:status',
+  'lead:delete',
 ] as const
 
 export type SubAdminScreen = (typeof SUB_ADMIN_SCREEN_OPTIONS)[number]
