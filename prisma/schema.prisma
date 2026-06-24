@@ -30,6 +30,7 @@ model User {
   createdStores      Store[]        @relation("CreatedStores")
   updatedStores      Store[]        @relation("UpdatedStores")
   uploadedStoreFiles StoreFile[]
+  uploadedLeadReceipts LeadReceipt[]
   createdStoreStats  StoreStat[]    @relation("CreatedStoreStats")
   updatedStoreStats  StoreStat[]    @relation("UpdatedStoreStats")
   createdTasks       Task[]         @relation("CreatedTasks")
@@ -98,6 +99,7 @@ model Lead {
   updatedBy           User?          @relation("UpdatedLeads", fields: [updatedById], references: [id])
   notifications       Notification[]
   activities          LeadActivity[]
+  receipts            LeadReceipt[]
 
   @@index([departmentId, status])
   @@index([followUpAt, followUpNotifiedAt])
@@ -105,6 +107,25 @@ model Lead {
   @@index([serviceId])
   @@index([createdById], map: "Lead_createdById_fkey")
   @@index([updatedById], map: "Lead_updatedById_fkey")
+}
+
+model LeadReceipt {
+  id           String   @id @default(cuid())
+  leadId       String
+  amount       Decimal?
+  note         String?
+  originalName String?
+  mimeType     String?
+  size         Int?
+  key          String?  @unique
+  url          String?
+  uploadedById String?
+  createdAt    DateTime @default(now())
+  lead         Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id])
+
+  @@index([leadId, createdAt])
+  @@index([uploadedById])
 }
 
 model LeadActivity {

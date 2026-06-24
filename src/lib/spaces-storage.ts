@@ -62,6 +62,38 @@ function sanitizePathPart(value: string) {
     .replace(/^-+|-+$/g, '') || 'file'
 }
 
+export async function uploadLeadReceiptToSpaces(
+  leadId: string,
+  file: Express.Multer.File,
+) {
+  const config = requireSpacesConfig()
+  const extension = extname(file.originalname)
+  const key = [
+    'lead-receipts',
+    sanitizePathPart(leadId),
+    `${Date.now()}-${randomUUID()}${extension}`,
+  ].join('/')
+
+  await getSpacesClient().send(
+    new PutObjectCommand({
+      Bucket: config.bucketName,
+      Key: key,
+      Body: file.buffer,
+      ContentType: file.mimetype,
+      ACL: 'public-read',
+    }),
+  )
+
+  const publicBaseUrl = config.domain
+    ? `https://${config.domain.replace(/^https?:\/\//, '')}`
+    : `${config.endpoint.replace(/\/$/, '')}/${config.bucketName}`
+
+  return {
+    key,
+    url: `${publicBaseUrl}/${key}`,
+  }
+}
+
 export async function uploadStoreFileToSpaces(
   storeId: string,
   category: string,

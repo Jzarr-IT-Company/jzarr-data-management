@@ -147,6 +147,7 @@ const LEAD_SELECT = {
       id: true,
       name: true,
       email: true,
+      managerId: true,
     },
   },
   updatedBy: {

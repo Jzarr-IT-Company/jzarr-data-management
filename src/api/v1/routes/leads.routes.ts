@@ -1,4 +1,5 @@
 import { Router, text } from 'express'
+import multer from 'multer'
 
 import { authMiddleware } from '../middleware/auth.middleware.js'
 import { requireScreenAccess } from '../middleware/screen.middleware.js'
@@ -15,7 +16,21 @@ import {
   listLeadsController,
   updateLeadController,
 } from '../controller/lead.controller.js'
+import {
+  addLeadReceiptController,
+  deleteLeadReceiptController,
+  listLeadReceiptsController,
+} from '../controller/leadReceipt.controller.js'
 import { createLeadSchema, updateLeadSchema } from '../validator/lead.validator.js'
+
+const receiptUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+    cb(null, allowed.includes(file.mimetype))
+  },
+})
 
 export const leadsRouter = Router()
 
@@ -55,3 +70,12 @@ leadsRouter.delete(
   requireScreenAccess('departments', ['ADMIN', 'MANAGER', 'MANAGER_USER']),
   deleteLeadController
 )
+
+// Receipt routes
+leadsRouter.get('/:leadId/receipts', listLeadReceiptsController)
+leadsRouter.post(
+  '/:leadId/receipts',
+  receiptUpload.single('file'),
+  addLeadReceiptController,
+)
+leadsRouter.delete('/:leadId/receipts/:receiptId', deleteLeadReceiptController)
