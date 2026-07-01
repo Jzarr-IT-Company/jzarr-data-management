@@ -55,8 +55,8 @@ function getSubAdminIdParam(req: Request) {
   return subAdminId.trim()
 }
 
-export async function listManagersController(_req: Request, res: Response) {
-  const managers = await listManagersService()
+export async function listManagersController(req: Request, res: Response) {
+  const managers = await listManagersService(req.user!.id, req.user!.role)
 
   return res.status(HTTP_STATUS.OK).json(successResponse('Managers fetched', managers))
 }

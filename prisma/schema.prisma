@@ -19,12 +19,16 @@ model User {
   managerId          String?
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
+  deletedAt          DateTime?
   allowedScreens     Json?
   manager            User?          @relation("ManagerTeam", fields: [managerId], references: [id], onDelete: SetNull)
   createdLeads       Lead[]         @relation("CreatedLeads")
   updatedLeads       Lead[]         @relation("UpdatedLeads")
+  assignedLeads      Lead[]         @relation("AssignedLeads")
   followUpCreatedLeads Lead[]       @relation("LeadFollowUpCreatedBy")
   leadActivities     LeadActivity[]
+  assignmentsMade    LeadAssignment[] @relation("AssignmentMadeBy")
+  assignmentsReceived LeadAssignment[] @relation("AssignmentReceivedBy")
   notifications      Notification[]
   refreshTokens      RefreshToken[]
   createdStores      Store[]        @relation("CreatedStores")
@@ -38,8 +42,11 @@ model User {
   updatedTasks       Task[]         @relation("UpdatedTasks")
   managedDepartments Department[]   @relation("ManagedDepartments")
   teamUsers          User[]         @relation("ManagerTeam")
+  givenTargets       Target[]       @relation("TargetGivenBy")
+  receivedTargets    Target[]       @relation("TargetReceivedBy")
 
   @@index([managerId])
+  @@index([role, deletedAt])
 }
 
 model Department {
@@ -79,6 +86,8 @@ model Lead {
   address             String?
   message             String?
   status              LeadStatus     @default(NEW)
+  source              LeadSource     @default(MANUAL)
+  metaLeadId          String?        @unique
   followUpAt          DateTime?
   followUpMessage     String?
   followUpNotifiedAt  DateTime?
@@ -88,10 +97,12 @@ model Lead {
   totalAmount         Decimal?
   receivingAmount     Decimal?
   pendingAmount       Decimal?
+  assignedToId        String?
   createdById         String?
   updatedById         String?
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
+  assignedTo          User?          @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
   createdBy           User?          @relation("CreatedLeads", fields: [createdById], references: [id])
   followUpCreatedBy   User?          @relation("LeadFollowUpCreatedBy", fields: [followUpCreatedById], references: [id], onDelete: SetNull)
   department          Department     @relation(fields: [departmentId], references: [id])
@@ -100,8 +111,11 @@ model Lead {
   notifications       Notification[]
   activities          LeadActivity[]
   receipts            LeadReceipt[]
+  assignments         LeadAssignment[]
 
   @@index([departmentId, status])
+  @@index([source])
+  @@index([assignedToId])
   @@index([followUpAt, followUpNotifiedAt])
   @@index([followUpCreatedById])
   @@index([serviceId])
@@ -297,6 +311,16 @@ enum LeadStatus {
   NOT_INTERESTED
 }
 
+enum LeadSource {
+  MANUAL
+  META
+  WHATSAPP
+  EMAIL
+  WEBSITE
+  REFERRAL
+  OTHER
+}
+
 enum TaskStatus {
   TODO
   IN_PROGRESS
@@ -315,4 +339,47 @@ enum StoreFileCategory {
   AUDIT
   DOCUMENT
   PRODUCT_PSD
+}
+
+model LeadAssignment {
+  id           String   @id @default(cuid())
+  leadId       String
+  assignedToId String
+  assignedById String
+  note         String?
+  createdAt    DateTime @default(now())
+  lead         Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  assignedTo   User     @relation("AssignmentReceivedBy", fields: [assignedToId], references: [id])
+  assignedBy   User     @relation("AssignmentMadeBy", fields: [assignedById], references: [id])
+
+  @@index([leadId, createdAt])
+  @@index([assignedToId])
+  @@index([assignedById])
+}
+
+model Target {
+  id           String       @id @default(cuid())
+  assignedToId String
+  assignedById String
+  title        String
+  description  String?
+  period       TargetPeriod @default(MONTHLY)
+  targetValue  Int
+  periodStart  DateTime
+  periodEnd    DateTime
+  notes        String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  assignedTo   User         @relation("TargetReceivedBy", fields: [assignedToId], references: [id])
+  assignedBy   User         @relation("TargetGivenBy", fields: [assignedById], references: [id])
+
+  @@index([assignedToId, periodStart, periodEnd])
+  @@index([assignedById])
+}
+
+enum TargetPeriod {
+  WEEKLY
+  MONTHLY
+  SIX_MONTH
+  YEARLY
 }

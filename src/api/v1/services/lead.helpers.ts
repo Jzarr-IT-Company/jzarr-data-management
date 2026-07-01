@@ -2,6 +2,10 @@ export const leadStatusValues = ['NEW', 'IN_PROGRESS', 'FOLLOW_UP', 'CONVERTED',
 
 export type LeadStatusValue = (typeof leadStatusValues)[number]
 
+export const leadSourceValues = ['MANUAL', 'META', 'WHATSAPP', 'EMAIL', 'WEBSITE', 'REFERRAL', 'OTHER'] as const
+
+export type LeadSourceValue = (typeof leadSourceValues)[number]
+
 type DepartmentSummary = {
   id: string
   name: string
@@ -13,6 +17,10 @@ type PersonSummary = {
   id: string
   name: string
   email: string | null
+}
+
+type AssignedPersonSummary = PersonSummary & {
+  role: string
 }
 
 export type LeadActivityRecord = {
@@ -28,6 +36,17 @@ type ServiceSummary = {
   name: string
 }
 
+export type LeadAssignmentRecord = {
+  id: string
+  leadId: string
+  assignedToId: string
+  assignedById: string
+  note: string | null
+  createdAt: Date
+  assignedTo: PersonSummary
+  assignedBy: PersonSummary
+}
+
 export type LeadRecord = {
   id: string
   referenceNo: string
@@ -40,10 +59,13 @@ export type LeadRecord = {
   address: string | null
   message: string | null
   status: LeadStatusValue
+  source: LeadSourceValue
+  metaLeadId: string | null
   followUpAt: Date | null
   followUpMessage: string | null
   followUpNotifiedAt: Date | null
   followUpCreatedById: string | null
+  assignedToId: string | null
   serviceId: string | null
   totalAmount: number | null
   receivingAmount: number | null
@@ -56,6 +78,7 @@ export type LeadRecord = {
   createdBy: PersonSummary | null
   updatedBy: PersonSummary | null
   followUpCreatedBy: PersonSummary | null
+  assignedTo: AssignedPersonSummary | null
   activities?: LeadActivityRecord[]
 }
 
@@ -73,10 +96,14 @@ export type SafeLead = {
   address: string | null
   message: string | null
   status: LeadStatusValue
+  source: LeadSourceValue
+  metaLeadId: string | null
   followUpAt: Date | null
   followUpMessage: string | null
   followUpNotifiedAt: Date | null
   followUpCreatedById: string | null
+  assignedToId: string | null
+  assignedTo: AssignedPersonSummary | null
   serviceId: string | null
   totalAmount: number | null
   receivingAmount: number | null
@@ -104,10 +131,14 @@ export function toSafeLead(lead: LeadRecord): SafeLead {
     address,
     message,
     status,
+    source,
+    metaLeadId,
     followUpAt,
     followUpMessage,
     followUpNotifiedAt,
     followUpCreatedById,
+    assignedToId,
+    assignedTo,
     serviceId,
     totalAmount,
     receivingAmount,
@@ -134,10 +165,14 @@ export function toSafeLead(lead: LeadRecord): SafeLead {
     address,
     message,
     status,
+    source,
+    metaLeadId: metaLeadId ?? null,
     followUpAt,
     followUpMessage,
     followUpNotifiedAt,
     followUpCreatedById,
+    assignedToId: assignedToId ?? null,
+    assignedTo: assignedTo ?? null,
     serviceId: serviceId ?? null,
     totalAmount: totalAmount ?? null,
     receivingAmount: receivingAmount ?? null,

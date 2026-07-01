@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { leadStatusValues } from '../services/lead.helpers.js'
+import { leadSourceValues, leadStatusValues } from '../services/lead.helpers.js'
 
 const nullableText = z.string().trim().min(1).nullable().optional()
 const nullableFollowUpDateTime = z.string().datetime({ offset: true }).nullable().optional()
@@ -51,6 +51,7 @@ export const createLeadSchema = withFollowUpValidation(
     address: nullableText,
     message: nullableText,
     status: z.enum(leadStatusValues).optional(),
+    source: z.enum(leadSourceValues).optional(),
     departmentId: z.string().trim().min(1),
     followUpAt: nullableFollowUpDateTime,
     followUpMessage: nullableFollowUpMessage,
@@ -59,6 +60,12 @@ export const createLeadSchema = withFollowUpValidation(
     receivingAmount: nullableDecimal,
   })
 )
+
+export const assignLeadsSchema = z.object({
+  leadIds: z.array(z.string().trim().min(1)).min(1, 'At least one lead is required'),
+  assignToUserId: z.string().trim().min(1, 'Target user is required'),
+  note: z.string().trim().max(500).nullable().optional(),
+})
 
 export const updateLeadSchema = withFollowUpValidation(
   z.object({

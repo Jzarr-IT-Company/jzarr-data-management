@@ -7,6 +7,7 @@ import { getUserAccessContext, type CurrentUserRole } from './user.access.js'
 import {
   generateLeadReferenceNo,
   isPrismaUniqueConstraintError,
+  leadSourceValues,
   leadStatusValues,
   normalizeLeadPhone,
   normalizeLeadStatus,
@@ -14,6 +15,7 @@ import {
   normalizeRequiredText,
   toSafeLead,
   type LeadRecord,
+  type LeadSourceValue,
   type LeadStatusValue,
 } from './lead.helpers.js'
 
@@ -33,6 +35,7 @@ type LeadPayload = {
   address?: string | null
   message?: string | null
   status?: LeadStatusValue
+  source?: LeadSourceValue
   followUpAt?: string | null
   followUpMessage?: string | null
   departmentId: string
@@ -71,6 +74,8 @@ type LeadCreatePayload = {
   address: string | null
   message: string | null
   status: LeadStatusValue
+  source: LeadSourceValue
+  metaLeadId: string | null
   followUpAt: Date | null
   followUpMessage: string | null
   followUpNotifiedAt: Date | null
@@ -117,6 +122,8 @@ const LEAD_SELECT = {
   address: true,
   message: true,
   status: true,
+  source: true,
+  metaLeadId: true,
   followUpAt: true,
   followUpMessage: true,
   followUpNotifiedAt: true,
@@ -128,6 +135,15 @@ const LEAD_SELECT = {
   createdAt: true,
   updatedAt: true,
   createdById: true,
+  assignedToId: true,
+  assignedTo: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+    },
+  },
   department: {
     select: {
       id: true,
@@ -264,7 +280,12 @@ function buildLeadWhereClause(
   }
 
   if (accessibleCreatorIds) {
-    where.createdById = { in: accessibleCreatorIds }
+    addAndCondition(where, {
+      OR: [
+        { createdById: { in: accessibleCreatorIds } },
+        { assignedToId: { in: accessibleCreatorIds } },
+      ],
+    })
   }
 
   if (status) {
@@ -272,16 +293,71 @@ function buildLeadWhereClause(
   }
 
   if (search) {
-    where.OR = [
+    addAndCondition(where, {
+      OR: [
       { name: { contains: search, mode: 'insensitive' as const } },
       { referenceNo: { contains: search, mode: 'insensitive' as const } },
       { phone: { contains: search, mode: 'insensitive' as const } },
       { email: { contains: search, mode: 'insensitive' as const } },
       { city: { contains: search, mode: 'insensitive' as const } },
-    ]
+      ],
+    })
   }
 
   return where
+}
+
+function addAndCondition(where: Record<string, unknown>, condition: Record<string, unknown>) {
+  const existing = where.AND
+
+  if (Array.isArray(existing)) {
+    where.AND = [...existing, condition]
+    return
+  }
+
+  where.AND = existing ? [existing, condition] : [condition]
+}
+
+function ensureLeadAccess(accessContext: Awaited<ReturnType<typeof getAccessContext>>, lead: LeadRecord) {
+  if (
+    accessContext.accessibleDepartmentIds &&
+    !accessContext.accessibleDepartmentIds.includes(lead.department.id)
+  ) {
+    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
+  }
+
+  if (accessContext.accessibleCreatorIds) {
+    const canAccessCreatedLead =
+      lead.createdById !== null && accessContext.accessibleCreatorIds.includes(lead.createdById)
+    const canAccessAssignedLead =
+      lead.assignedToId !== null && accessContext.accessibleCreatorIds.includes(lead.assignedToId)
+
+    if (!canAccessCreatedLead && !canAccessAssignedLead) {
+      throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
+    }
+  }
+}
+
+export async function ensureLeadAccessService(
+  userId: string,
+  role: CurrentUserRole | undefined,
+  leadId: string,
+  allowedScreens?: string[],
+) {
+  if (isSubAdmin(role) && !hasLeadPerm(allowedScreens, 'lead:read')) {
+    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
+  }
+
+  const lead = await findLeadById(leadId)
+
+  if (!lead) {
+    return null
+  }
+
+  const accessContext = await getAccessContext(userId, role)
+  ensureLeadAccess(accessContext, lead)
+
+  return lead
 }
 
 type LeadTransactionClient = {
@@ -340,6 +416,8 @@ function normalizeLeadCreatePayload(payload: LeadPayload): LeadCreatePayload {
   const pendingAmount =
     totalAmount != null && receivingAmount != null ? totalAmount - receivingAmount : null
 
+  const source = payload.source && leadSourceValues.includes(payload.source) ? payload.source : 'MANUAL'
+
   return {
     name: normalizeRequiredText(payload.name),
     fatherName: normalizeOptionalText(payload.fatherName),
@@ -350,6 +428,8 @@ function normalizeLeadCreatePayload(payload: LeadPayload): LeadCreatePayload {
     address: normalizeOptionalText(payload.address),
     message: normalizeOptionalText(payload.message),
     status: payload.status ?? 'NEW',
+    source,
+    metaLeadId: null,
     followUpAt: payload.followUpAt ? new Date(payload.followUpAt) : null,
     followUpMessage: normalizeOptionalText(payload.followUpMessage),
     followUpNotifiedAt: null,
@@ -571,27 +651,10 @@ export async function getLeadService(userId: string, role: CurrentUserRole | und
     throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
   }
 
-  const lead = await findLeadById(leadId)
+  const lead = await ensureLeadAccessService(userId, role, leadId, allowedScreens)
 
   if (!lead) {
     return null
-  }
-
-  const accessContext = await getAccessContext(userId, role)
-
-  if (
-    accessContext.accessibleDepartmentIds &&
-    !accessContext.accessibleDepartmentIds.includes(lead.department.id)
-  ) {
-    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
-  }
-
-  if (
-    accessContext.accessibleCreatorIds &&
-    lead.createdById !== null &&
-    !accessContext.accessibleCreatorIds.includes(lead.createdById)
-  ) {
-    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
   }
 
   return toSafeLead(lead)
@@ -664,21 +727,7 @@ export async function updateLeadService(
   }
 
   const accessContext = await getAccessContext(userId, role)
-
-  if (
-    accessContext.accessibleDepartmentIds &&
-    !accessContext.accessibleDepartmentIds.includes(lead.department.id)
-  ) {
-    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
-  }
-
-  if (
-    accessContext.accessibleCreatorIds &&
-    lead.createdById !== null &&
-    !accessContext.accessibleCreatorIds.includes(lead.createdById)
-  ) {
-    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
-  }
+  ensureLeadAccess(accessContext, lead)
 
   const normalizedPayload = canDoFullLeadUpdate(role, allowedScreens)
     ? normalizeLeadAdminUpdatePayload(payload, lead, userId)
@@ -775,21 +824,7 @@ export async function deleteLeadService(userId: string, role: CurrentUserRole | 
   }
 
   const accessContext = await getAccessContext(userId, role)
-
-  if (
-    accessContext.accessibleDepartmentIds &&
-    !accessContext.accessibleDepartmentIds.includes(lead.department.id)
-  ) {
-    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
-  }
-
-  if (
-    accessContext.accessibleCreatorIds &&
-    lead.createdById !== null &&
-    !accessContext.accessibleCreatorIds.includes(lead.createdById)
-  ) {
-    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
-  }
+  ensureLeadAccess(accessContext, lead)
 
   await prisma.lead.delete({
     where: {

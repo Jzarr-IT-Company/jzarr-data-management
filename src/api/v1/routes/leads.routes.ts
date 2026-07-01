@@ -17,11 +17,16 @@ import {
   updateLeadController,
 } from '../controller/lead.controller.js'
 import {
+  assignLeadsController,
+  getAssignableUsersController,
+  getLeadAssignmentsController,
+} from '../controller/lead.assignment.controller.js'
+import {
   addLeadReceiptController,
   deleteLeadReceiptController,
   listLeadReceiptsController,
 } from '../controller/leadReceipt.controller.js'
-import { createLeadSchema, updateLeadSchema } from '../validator/lead.validator.js'
+import { assignLeadsSchema, createLeadSchema, updateLeadSchema } from '../validator/lead.validator.js'
 
 const receiptUpload = multer({
   storage: multer.memoryStorage(),
@@ -48,6 +53,20 @@ leadsRouter.post(
   text({ type: ['text/csv', 'text/plain', 'application/csv'] }),
   importLeadsController
 )
+
+// Assignment routes — must be before /:leadId to avoid param capture
+leadsRouter.get(
+  '/assignable-users',
+  requireRoles('ADMIN', 'SUB_ADMIN', 'MANAGER'),
+  getAssignableUsersController,
+)
+leadsRouter.post(
+  '/assign',
+  requireRoles('ADMIN', 'SUB_ADMIN', 'MANAGER'),
+  validationMiddleware(assignLeadsSchema),
+  assignLeadsController,
+)
+
 leadsRouter.get(
   '/:leadId',
   requireScreenAccess('departments', ['ADMIN', 'MANAGER', 'MANAGER_USER']),
@@ -70,6 +89,8 @@ leadsRouter.delete(
   requireScreenAccess('departments', ['ADMIN', 'MANAGER', 'MANAGER_USER']),
   deleteLeadController
 )
+
+leadsRouter.get('/:leadId/assignments', getLeadAssignmentsController)
 
 // Receipt routes
 leadsRouter.get('/:leadId/receipts', listLeadReceiptsController)

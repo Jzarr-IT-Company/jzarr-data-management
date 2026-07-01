@@ -1,5 +1,6 @@
 import { HTTP_STATUS } from '../../../constant/index.js'
 import { prisma } from '../../../lib/prisma.js'
+import type { UserRole } from '../../../types/user-role.js'
 import { hashPassword } from '../../../utils/auth.js'
 import { AppError } from '../../../utils/app-error.js'
 import {
@@ -117,6 +118,7 @@ async function findManagerById(managerId: string) {
     where: {
       id: managerId,
       role: 'MANAGER',
+      deletedAt: null,
     },
     include: MANAGER_INCLUDE,
   })
@@ -137,10 +139,50 @@ function buildSafeManagerList(managers: ManagerRecord[]) {
   return managers.map(toSafeManager)
 }
 
-export async function listManagersService() {
+export async function listManagersService(callerId: string, callerRole: UserRole) {
+  let departmentIds: string[] | undefined
+
+  if (callerRole === 'SUB_ADMIN') {
+    const subAdmin = await prisma.user.findFirst({
+      where: {
+        id: callerId,
+        role: 'SUB_ADMIN',
+        status: 'ACTIVE',
+        deletedAt: null,
+      },
+      select: {
+        managedDepartments: {
+          select: {
+            id: true,
+          },
+        },
+      },
+    })
+
+    if (!subAdmin) {
+      throw new AppError('Sub admin not found or inactive', HTTP_STATUS.FORBIDDEN)
+    }
+
+    departmentIds = subAdmin.managedDepartments.map((department) => department.id)
+  } else if (callerRole !== 'ADMIN') {
+    throw new AppError('You do not have permission to list managers', HTTP_STATUS.FORBIDDEN)
+  }
+
   const managers = await prisma.user.findMany({
     where: {
       role: 'MANAGER',
+      deletedAt: null,
+      ...(departmentIds
+        ? {
+            managedDepartments: {
+              some: {
+                id: {
+                  in: departmentIds,
+                },
+              },
+            },
+          }
+        : {}),
     },
     include: MANAGER_INCLUDE,
     orderBy: {
@@ -717,31 +759,28 @@ export async function deleteManagerService(managerId: string) {
     return null
   }
 
-  const leadCount = await prisma.lead.count({
-    where: {
-      OR: [
-        {
-          createdById: managerId,
-        },
-        {
-          updatedById: managerId,
-        },
-      ],
-    },
-  })
+  const deletedAt = new Date()
 
-  if (leadCount > 0) {
-    throw new AppError(
-      'Manager has linked leads and cannot be deleted. Deactivate the account instead.',
-      HTTP_STATUS.CONFLICT
-    )
-  }
-
-  await prisma.user.delete({
-    where: {
-      id: managerId,
-    },
-  })
+  await prisma.$transaction([
+    prisma.user.update({
+      where: {
+        id: managerId,
+      },
+      data: {
+        status: 'INACTIVE',
+        deletedAt,
+      },
+    }),
+    prisma.refreshToken.updateMany({
+      where: {
+        userId: managerId,
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: deletedAt,
+      },
+    }),
+  ])
 
   return true
 }

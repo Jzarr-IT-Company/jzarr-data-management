@@ -5,6 +5,7 @@ import morgan from 'morgan'
 
 import { corsConfig } from './config/cors.js'
 import { v1Router } from './api/v1/routes/index.js'
+import { webhookRouter } from './api/v1/routes/webhook.routes.js'
 import { apiErrorMiddleware } from './api/v1/middleware/error.middleware.js'
 import { notFoundMiddleware } from './api/v1/middleware/notFound.middleware.js'
 
@@ -24,6 +25,10 @@ app.use(
     credentials: true,
   })
 )
+
+// Webhook routes use raw body for HMAC signature verification — must be before express.json()
+app.use('/api/v1/webhooks', express.raw({ type: 'application/json' }), webhookRouter)
+
 app.use(express.json())
 app.use(morgan('dev'))
 

@@ -6,7 +6,7 @@ export type CurrentUserRole = 'ADMIN' | 'MANAGER' | 'MANAGER_USER' | 'SUB_ADMIN'
 
 export type UserAccessContext = {
   accessibleDepartmentIds: string[] | null
-  // null = no creator filter (admin); otherwise only leads created by these user IDs are visible
+  // null = no user filter; otherwise visible leads must be created by or assigned to these user IDs.
   accessibleCreatorIds: string[] | null
 }
 

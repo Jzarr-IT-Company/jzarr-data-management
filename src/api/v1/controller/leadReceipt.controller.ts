@@ -16,7 +16,12 @@ export async function listLeadReceiptsController(req: Request, res: Response) {
   if (!leadId) {
     return res.status(HTTP_STATUS.BAD_REQUEST).json(errorResponse('Lead id is required', HTTP_STATUS.BAD_REQUEST))
   }
-  const receipts = await listLeadReceiptsService(leadId)
+  const receipts = await listLeadReceiptsService(
+    req.user!.id,
+    req.user?.role,
+    leadId,
+    req.user?.allowedScreens,
+  )
   return res.status(HTTP_STATUS.OK).json(successResponse('Receipts fetched', receipts))
 }
 
@@ -30,7 +35,19 @@ export async function addLeadReceiptController(req: Request, res: Response) {
   const note: string | null = req.body.note || null
   const file = req.file
 
-  const receipt = await addLeadReceiptService(leadId, userId, amount, note, file)
+  if (amount !== null && (!Number.isFinite(amount) || amount < 0)) {
+    return res.status(HTTP_STATUS.BAD_REQUEST).json(errorResponse('Invalid amount', HTTP_STATUS.BAD_REQUEST))
+  }
+
+  const receipt = await addLeadReceiptService(
+    leadId,
+    userId,
+    req.user?.role,
+    amount,
+    note,
+    file,
+    req.user?.allowedScreens,
+  )
   return res.status(HTTP_STATUS.CREATED).json(successResponse('Receipt added', receipt))
 }
 
@@ -40,6 +57,12 @@ export async function deleteLeadReceiptController(req: Request, res: Response) {
   if (!leadId || !receiptId) {
     return res.status(HTTP_STATUS.BAD_REQUEST).json(errorResponse('Invalid params', HTTP_STATUS.BAD_REQUEST))
   }
-  await deleteLeadReceiptService(leadId, receiptId)
+  await deleteLeadReceiptService(
+    req.user!.id,
+    req.user?.role,
+    leadId,
+    receiptId,
+    req.user?.allowedScreens,
+  )
   return res.status(HTTP_STATUS.OK).json(successResponse('Receipt deleted'))
 }

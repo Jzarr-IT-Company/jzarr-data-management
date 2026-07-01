@@ -141,13 +141,15 @@ function buildTaskWhere(
   accessibleDepartmentIds: string[] | null,
 ): Prisma.TaskWhereInput {
   const where: Prisma.TaskWhereInput = {}
+  const and: Prisma.TaskWhereInput[] = []
 
   if (role !== 'ADMIN') {
     if (!accessibleDepartmentIds) {
       throw new AppError('Unauthorized', HTTP_STATUS.UNAUTHORIZED)
     }
 
-    where.managerId = userId
+    // Managers see tasks assigned to them and tasks they created for their agents
+    and.push({ OR: [{ managerId: userId }, { createdById: userId }] })
 
     if (query.departmentId && !accessibleDepartmentIds.includes(query.departmentId)) {
       throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
@@ -155,11 +157,13 @@ function buildTaskWhere(
   }
 
   if (query.search) {
-    where.OR = [
-      { title: { contains: query.search } },
-      { description: { contains: query.search } },
-      { notes: { contains: query.search } },
-    ]
+    and.push({
+      OR: [
+        { title: { contains: query.search } },
+        { description: { contains: query.search } },
+        { notes: { contains: query.search } },
+      ],
+    })
   }
 
   if (query.status) {
@@ -198,6 +202,10 @@ function buildTaskWhere(
     }
   }
 
+  if (and.length) {
+    where.AND = and
+  }
+
   return where
 }
 
@@ -211,16 +219,26 @@ async function getScopedDepartments(userId: string, role?: CurrentUserRole) {
   return accessibleDepartmentIds
 }
 
-async function resolveManagerAndDepartment(managerId: string, departmentId: string) {
-  const manager = await prisma.user.findUnique({
+// Validates that the actor may assign a task to the given assignee in the given department.
+//   ADMIN   -> assignee must be a MANAGER; department must be one the manager manages.
+//   MANAGER -> assignee must be one of the manager's own agents (MANAGER_USER);
+//              department must be one the manager manages.
+async function resolveAssigneeAndDepartment(
+  actorId: string,
+  actorRole: CurrentUserRole | undefined,
+  assigneeId: string,
+  departmentId: string,
+) {
+  const assignee = await prisma.user.findUnique({
     where: {
-      id: managerId,
+      id: assigneeId,
     },
     select: {
       id: true,
       name: true,
       role: true,
       status: true,
+      managerId: true,
       managedDepartments: {
         select: {
           id: true,
@@ -230,20 +248,44 @@ async function resolveManagerAndDepartment(managerId: string, departmentId: stri
     },
   })
 
-  if (!manager || manager.role !== 'MANAGER' || manager.status !== 'ACTIVE') {
-    throw new AppError('Manager not found or inactive', HTTP_STATUS.BAD_REQUEST)
+  if (!assignee || assignee.status !== 'ACTIVE') {
+    throw new AppError('Assignee not found or inactive', HTTP_STATUS.BAD_REQUEST)
   }
 
-  const allowedDepartment = manager.managedDepartments.find((department) => department.id === departmentId)
+  if (actorRole === 'ADMIN') {
+    if (assignee.role !== 'MANAGER') {
+      throw new AppError('Tasks can only be assigned to managers', HTTP_STATUS.BAD_REQUEST)
+    }
 
-  if (!allowedDepartment) {
-    throw new AppError('Selected department is not assigned to this manager', HTTP_STATUS.FORBIDDEN)
+    const department = assignee.managedDepartments.find((item) => item.id === departmentId)
+
+    if (!department) {
+      throw new AppError('Selected department is not assigned to this manager', HTTP_STATUS.FORBIDDEN)
+    }
+
+    return { assignee, department }
   }
 
-  return {
-    manager,
-    department: allowedDepartment,
+  if (actorRole === 'MANAGER') {
+    if (assignee.role !== 'MANAGER_USER' || assignee.managerId !== actorId) {
+      throw new AppError('You can only assign tasks to your own team members', HTTP_STATUS.FORBIDDEN)
+    }
+
+    const actor = await prisma.user.findUnique({
+      where: { id: actorId },
+      select: { managedDepartments: { select: { id: true, name: true } } },
+    })
+
+    const department = actor?.managedDepartments.find((item) => item.id === departmentId)
+
+    if (!department) {
+      throw new AppError('Selected department is not in your scope', HTTP_STATUS.FORBIDDEN)
+    }
+
+    return { assignee, department }
   }
+
+  throw new AppError('Unauthorized', HTTP_STATUS.UNAUTHORIZED)
 }
 
 function buildTaskSummary(payload: TaskRecord) {
@@ -351,8 +393,9 @@ export async function getTaskService(userId: string, role: CurrentUserRole | und
   if (role !== 'ADMIN') {
     const isDepartmentAllowed =
       accessibleDepartmentIds !== null && accessibleDepartmentIds.includes(task.departmentId)
+    const isAssigneeOrCreator = task.managerId === userId || task.createdBy?.id === userId
 
-    if (!isDepartmentAllowed || task.managerId !== userId) {
+    if (!isDepartmentAllowed || !isAssigneeOrCreator) {
       throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
     }
   }
@@ -365,7 +408,7 @@ export async function createTaskService(
   role: CurrentUserRole | undefined,
   payload: TaskPayload,
 ) {
-  if (role !== 'ADMIN') {
+  if (role !== 'ADMIN' && role !== 'MANAGER') {
     throw new AppError('Unauthorized', HTTP_STATUS.UNAUTHORIZED)
   }
 
@@ -385,7 +428,7 @@ export async function createTaskService(
     throw new AppError('Due date cannot be before start date', HTTP_STATUS.BAD_REQUEST)
   }
 
-  const { department } = await resolveManagerAndDepartment(payload.managerId, payload.departmentId)
+  await resolveAssigneeAndDepartment(userId, role, payload.managerId, payload.departmentId)
 
   const task = await prisma.$transaction(async (transaction) => {
     const created = await transaction.task.create({
@@ -464,7 +507,7 @@ export async function updateTaskService(
   const nextManagerId = payload.managerId || existingTask.managerId
   const nextDepartmentId = payload.departmentId || existingTask.departmentId
 
-  await resolveManagerAndDepartment(nextManagerId, nextDepartmentId)
+  await resolveAssigneeAndDepartment(userId, role, nextManagerId, nextDepartmentId)
 
   const startDate = payload.startDate ? normalizeTaskDate(payload.startDate) : undefined
   const dueDate = payload.dueDate ? normalizeTaskDate(payload.dueDate) : undefined
@@ -518,7 +561,7 @@ export async function updateTaskStatusService(
     return null
   }
 
-  if (role !== 'ADMIN' && task.managerId !== userId) {
+  if (role !== 'ADMIN' && task.managerId !== userId && task.createdById !== userId) {
     throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN)
   }
 

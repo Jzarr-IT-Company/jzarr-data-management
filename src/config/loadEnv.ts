@@ -31,6 +31,13 @@ const envSchema = z.object({
   AWS_S3_REGION: z.string().optional(),
   AWS_S3_DOMAIN: z.string().optional(),
   AWS_S3_ENDPOINT: z.string().optional(),
+  // Meta Lead Ads webhook integration
+  META_VERIFY_TOKEN: z.string().optional(),
+  META_APP_SECRET: z.string().optional(),
+  META_PAGE_ACCESS_TOKEN: z.string().optional(),
+  META_DEPARTMENT_ID: z.string().optional(),
+  META_DEFAULT_CITY: z.string().optional(),
+  META_API_VERSION: z.string().default('v19.0'),
 })
 
 export const env = envSchema.parse(process.env)

@@ -10,6 +10,7 @@ import { reportsRouter } from './reports.routes.js'
 import { taskRouter } from './task.routes.js'
 import { notificationRouter } from './notifications.routes.js'
 import { storesRouter } from './stores.routes.js'
+import { targetRouter } from './target.routes.js'
 import { usersRouter } from './users.routes.js'
 
 export const v1Router = Router()
@@ -23,5 +24,6 @@ v1Router.use('/leads', leadsRouter)
 v1Router.use('/reports', reportsRouter)
 v1Router.use('/tasks', taskRouter)
 v1Router.use('/notifications', notificationRouter)
+v1Router.use('/targets', targetRouter)
 v1Router.use('/admin/users', usersRouter)
 v1Router.use('/health', healthRouter)
