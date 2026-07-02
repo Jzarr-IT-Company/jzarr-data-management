@@ -23,6 +23,17 @@ type LeadListQuery = {
   search?: string
   status?: string
   departmentId?: string
+  city?: string
+  managerId?: string
+  createdById?: string
+  serviceId?: string
+  source?: string
+  assignment?: string
+  payment?: string
+  fromDate?: string
+  toDate?: string
+  page?: number
+  limit?: number
 }
 
 type LeadPayload = {
@@ -259,14 +270,28 @@ function buildLeadWhereClause(
   query: LeadListQuery,
   accessibleDepartmentIds: string[] | null,
   accessibleCreatorIds: string[] | null,
+  currentUserId?: string,
 ) {
   const where: Record<string, unknown> = {}
   const status = normalizeLeadStatus(query.status)
+  const source = typeof query.source === 'string' ? query.source.trim().toUpperCase() : ''
   const search = query.search?.trim()
   const departmentId = query.departmentId?.trim()
+  const city = query.city?.trim()
+  const managerId = query.managerId?.trim()
+  const createdById = query.createdById?.trim()
+  const serviceId = query.serviceId?.trim()
+  const assignment = query.assignment?.trim()
+  const payment = query.payment?.trim()
+  const fromDate = query.fromDate?.trim()
+  const toDate = query.toDate?.trim()
 
   if (query.status && !status) {
     throw new AppError('Invalid lead status', HTTP_STATUS.BAD_REQUEST)
+  }
+
+  if (source && !leadSourceValues.includes(source as LeadSourceValue)) {
+    throw new AppError('Invalid lead source', HTTP_STATUS.BAD_REQUEST)
   }
 
   if (departmentId) {
@@ -290,6 +315,74 @@ function buildLeadWhereClause(
 
   if (status) {
     where.status = status
+  }
+
+  if (source) {
+    where.source = source
+  }
+
+  if (city) {
+    where.city = city
+  }
+
+  if (serviceId) {
+    where.serviceId = serviceId
+  }
+
+  if (managerId) {
+    addAndCondition(where, {
+      OR: [
+        { createdById: managerId },
+        { createdBy: { managerId } },
+      ],
+    })
+  }
+
+  if (createdById) {
+    where.createdById = createdById
+  }
+
+  if (assignment === 'unassigned') {
+    where.assignedToId = null
+  } else if (assignment === 'assigned') {
+    where.assignedToId = { not: null }
+  } else if (assignment === 'mine' && currentUserId) {
+    where.assignedToId = currentUserId
+  }
+
+  if (payment === 'pending') {
+    where.pendingAmount = { gt: 0 }
+  } else if (payment === 'paid') {
+    addAndCondition(where, {
+      OR: [
+        { pendingAmount: null },
+        { pendingAmount: { equals: 0 } },
+      ],
+    })
+  }
+
+  if (fromDate || toDate) {
+    const createdAt: Record<string, Date> = {}
+
+    if (fromDate) {
+      const from = new Date(fromDate)
+      if (Number.isNaN(from.getTime())) {
+        throw new AppError('Invalid from date', HTTP_STATUS.BAD_REQUEST)
+      }
+      from.setHours(0, 0, 0, 0)
+      createdAt.gte = from
+    }
+
+    if (toDate) {
+      const to = new Date(toDate)
+      if (Number.isNaN(to.getTime())) {
+        throw new AppError('Invalid to date', HTTP_STATUS.BAD_REQUEST)
+      }
+      to.setHours(23, 59, 59, 999)
+      createdAt.lte = to
+    }
+
+    where.createdAt = createdAt
   }
 
   if (search) {
@@ -633,17 +726,49 @@ export async function listLeadsService(
     query,
     accessContext.accessibleDepartmentIds,
     accessContext.accessibleCreatorIds,
+    userId,
   )
 
-  const leads = await prisma.lead.findMany({
+  const hasPagination = typeof query.page === 'number' || typeof query.limit === 'number'
+  const page = Math.max(1, query.page ?? 1)
+  const limit = Math.min(100, Math.max(1, query.limit ?? 25))
+
+  const findArgs = {
     where,
     orderBy: {
       createdAt: 'desc',
     },
     select: LEAD_SELECT,
-  })
+    ...(hasPagination
+      ? {
+          skip: (page - 1) * limit,
+          take: limit,
+        }
+      : {}),
+  } satisfies Prisma.LeadFindManyArgs
 
-  return (leads as unknown as LeadRecord[]).map((lead) => toSafeLead(lead))
+  const [leads, total] = hasPagination
+    ? await Promise.all([
+        prisma.lead.findMany(findArgs),
+        prisma.lead.count({ where }),
+      ])
+    : [await prisma.lead.findMany(findArgs), undefined]
+
+  const normalizedLeads = (leads as unknown as LeadRecord[]).map((lead) => toSafeLead(lead))
+
+  if (hasPagination) {
+    return {
+      leads: normalizedLeads,
+      pagination: {
+        page,
+        limit,
+        total: total ?? normalizedLeads.length,
+        totalPages: Math.max(1, Math.ceil((total ?? normalizedLeads.length) / limit)),
+      },
+    }
+  }
+
+  return normalizedLeads
 }
 
 export async function getLeadService(userId: string, role: CurrentUserRole | undefined, leadId: string, allowedScreens?: string[]) {

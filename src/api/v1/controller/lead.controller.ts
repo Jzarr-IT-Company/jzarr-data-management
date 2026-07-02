@@ -19,12 +19,35 @@ function getLeadIdParam(req: Request) {
   return leadId.trim()
 }
 
+function getStringQuery(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function getNumberQuery(value: unknown) {
+  if (typeof value !== 'string' || !value.trim()) {
+    return undefined
+  }
+
+  const numberValue = Number.parseInt(value, 10)
+  return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : undefined
+}
+
 export async function listLeadsController(req: Request, res: Response) {
   const leads = await listLeadsService(req.user!.id, req.user?.role, {
-    search: typeof req.query.search === 'string' ? req.query.search : undefined,
-    status: typeof req.query.status === 'string' ? req.query.status : undefined,
-    departmentId:
-      typeof req.query.departmentId === 'string' ? req.query.departmentId : undefined,
+    search: getStringQuery(req.query.search),
+    status: getStringQuery(req.query.status),
+    departmentId: getStringQuery(req.query.departmentId),
+    city: getStringQuery(req.query.city),
+    managerId: getStringQuery(req.query.managerId),
+    createdById: getStringQuery(req.query.createdById),
+    serviceId: getStringQuery(req.query.serviceId),
+    source: getStringQuery(req.query.source),
+    assignment: getStringQuery(req.query.assignment),
+    payment: getStringQuery(req.query.payment),
+    fromDate: getStringQuery(req.query.fromDate),
+    toDate: getStringQuery(req.query.toDate),
+    page: getNumberQuery(req.query.page),
+    limit: getNumberQuery(req.query.limit),
   }, req.user?.allowedScreens)
 
   return res.status(HTTP_STATUS.OK).json(successResponse('Leads fetched', leads))
