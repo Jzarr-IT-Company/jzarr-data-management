@@ -9,6 +9,7 @@ import {
   deleteTaskController,
   getTaskController,
   listTasksController,
+  taskAssignableUsersController,
   updateTaskController,
   updateTaskStatusController,
 } from '../controller/task.controller.js'
@@ -23,6 +24,11 @@ export const taskRouter = Router()
 taskRouter.use(authMiddleware, requireRoles('ADMIN', 'MANAGER', 'SUB_ADMIN'))
 
 taskRouter.get('/', requireScreenAccess('tasks', ['ADMIN', 'MANAGER']), listTasksController)
+taskRouter.get(
+  '/assignable-users',
+  requireRoles('ADMIN', 'SUB_ADMIN', 'MANAGER'),
+  taskAssignableUsersController,
+)
 taskRouter.get('/:taskId', requireScreenAccess('tasks', ['ADMIN', 'MANAGER']), getTaskController)
 taskRouter.post(
   '/',

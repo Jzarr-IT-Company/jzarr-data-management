@@ -220,9 +220,10 @@ async function getScopedDepartments(userId: string, role?: CurrentUserRole) {
 }
 
 // Validates that the actor may assign a task to the given assignee in the given department.
-//   ADMIN   -> assignee must be a MANAGER; department must be one the manager manages.
-//   MANAGER -> assignee must be one of the manager's own agents (MANAGER_USER);
-//              department must be one the manager manages.
+//   ADMIN     -> assignee can be a SUB_ADMIN, MANAGER, or MANAGER_USER (anyone).
+//   SUB_ADMIN -> assignee must be a MANAGER within the sub admin's departments.
+//   MANAGER   -> assignee must be one of the manager's own agents (MANAGER_USER).
+// Department must always be one that is valid for the chosen assignee.
 async function resolveAssigneeAndDepartment(
   actorId: string,
   actorRole: CurrentUserRole | undefined,
@@ -245,6 +246,16 @@ async function resolveAssigneeAndDepartment(
           name: true,
         },
       },
+      manager: {
+        select: {
+          managedDepartments: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      },
     },
   })
 
@@ -252,15 +263,49 @@ async function resolveAssigneeAndDepartment(
     throw new AppError('Assignee not found or inactive', HTTP_STATUS.BAD_REQUEST)
   }
 
+  // Departments that are valid targets for this assignee
+  const assigneeDepartments =
+    assignee.role === 'MANAGER_USER'
+      ? assignee.manager?.managedDepartments ?? []
+      : assignee.managedDepartments
+
   if (actorRole === 'ADMIN') {
-    if (assignee.role !== 'MANAGER') {
-      throw new AppError('Tasks can only be assigned to managers', HTTP_STATUS.BAD_REQUEST)
+    if (!['SUB_ADMIN', 'MANAGER', 'MANAGER_USER'].includes(assignee.role)) {
+      throw new AppError('Cannot assign tasks to this user', HTTP_STATUS.BAD_REQUEST)
     }
 
-    const department = assignee.managedDepartments.find((item) => item.id === departmentId)
+    const department = assigneeDepartments.find((item) => item.id === departmentId)
 
     if (!department) {
-      throw new AppError('Selected department is not assigned to this manager', HTTP_STATUS.FORBIDDEN)
+      throw new AppError('Selected department is not valid for this user', HTTP_STATUS.FORBIDDEN)
+    }
+
+    return { assignee, department }
+  }
+
+  if (actorRole === 'SUB_ADMIN') {
+    if (assignee.role !== 'MANAGER') {
+      throw new AppError('Sub admins can only assign tasks to managers', HTTP_STATUS.FORBIDDEN)
+    }
+
+    const actor = await prisma.user.findUnique({
+      where: { id: actorId },
+      select: { managedDepartments: { select: { id: true } } },
+    })
+
+    if (!actor) {
+      throw new AppError('Unauthorized', HTTP_STATUS.UNAUTHORIZED)
+    }
+
+    const actorDeptIds = new Set(actor.managedDepartments.map((d) => d.id))
+
+    // Department must be one both the sub admin and the manager share
+    const department = assignee.managedDepartments.find(
+      (item) => item.id === departmentId && actorDeptIds.has(item.id),
+    )
+
+    if (!department) {
+      throw new AppError('Selected department is not in your shared scope', HTTP_STATUS.FORBIDDEN)
     }
 
     return { assignee, department }
@@ -286,6 +331,91 @@ async function resolveAssigneeAndDepartment(
   }
 
   throw new AppError('Unauthorized', HTTP_STATUS.UNAUTHORIZED)
+}
+
+// Users the actor can assign tasks to, each with their valid task departments.
+export async function getTaskAssignableUsersService(
+  actorId: string,
+  actorRole: CurrentUserRole | undefined,
+): Promise<Array<{ id: string; name: string; email: string; role: string; departments: { id: string; name: string }[] }>> {
+  if (actorRole === 'ADMIN') {
+    const users = await prisma.user.findMany({
+      where: { status: 'ACTIVE', role: { in: ['SUB_ADMIN', 'MANAGER', 'MANAGER_USER'] } },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        managedDepartments: { select: { id: true, name: true } },
+        manager: { select: { managedDepartments: { select: { id: true, name: true } } } },
+      },
+      orderBy: [{ role: 'asc' }, { name: 'asc' }],
+    })
+
+    return users.map((u) => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      departments: u.role === 'MANAGER_USER' ? u.manager?.managedDepartments ?? [] : u.managedDepartments,
+    }))
+  }
+
+  if (actorRole === 'SUB_ADMIN') {
+    const actor = await prisma.user.findUnique({
+      where: { id: actorId },
+      select: { managedDepartments: { select: { id: true } } },
+    })
+    const deptIds = actor?.managedDepartments.map((d) => d.id) ?? []
+
+    const managers = await prisma.user.findMany({
+      where: {
+        status: 'ACTIVE',
+        role: 'MANAGER',
+        managedDepartments: { some: { id: { in: deptIds } } },
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        managedDepartments: { select: { id: true, name: true } },
+      },
+      orderBy: { name: 'asc' },
+    })
+
+    return managers.map((m) => ({
+      id: m.id,
+      name: m.name,
+      email: m.email,
+      role: m.role,
+      departments: m.managedDepartments.filter((d) => deptIds.includes(d.id)),
+    }))
+  }
+
+  if (actorRole === 'MANAGER') {
+    const actor = await prisma.user.findUnique({
+      where: { id: actorId },
+      select: { managedDepartments: { select: { id: true, name: true } } },
+    })
+    const managerDepartments = actor?.managedDepartments ?? []
+
+    const agents = await prisma.user.findMany({
+      where: { status: 'ACTIVE', role: 'MANAGER_USER', managerId: actorId },
+      select: { id: true, name: true, email: true, role: true },
+      orderBy: { name: 'asc' },
+    })
+
+    return agents.map((a) => ({
+      id: a.id,
+      name: a.name,
+      email: a.email,
+      role: a.role,
+      departments: managerDepartments,
+    }))
+  }
+
+  return []
 }
 
 function buildTaskSummary(payload: TaskRecord) {
@@ -408,7 +538,7 @@ export async function createTaskService(
   role: CurrentUserRole | undefined,
   payload: TaskPayload,
 ) {
-  if (role !== 'ADMIN' && role !== 'MANAGER') {
+  if (role !== 'ADMIN' && role !== 'SUB_ADMIN' && role !== 'MANAGER') {
     throw new AppError('Unauthorized', HTTP_STATUS.UNAUTHORIZED)
   }
 

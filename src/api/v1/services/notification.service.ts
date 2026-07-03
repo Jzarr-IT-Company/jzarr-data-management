@@ -25,6 +25,9 @@ type NotificationListItem = {
     referenceNo: string
     name: string
     status: string
+    department: {
+      code: string
+    } | null
   } | null
 }
 
@@ -65,6 +68,11 @@ export async function listNotificationsService(userId: string, role: CurrentUser
           referenceNo: true,
           name: true,
           status: true,
+          department: {
+            select: {
+              code: true,
+            },
+          },
         },
       },
     },

@@ -4,11 +4,18 @@ import { HTTP_STATUS, errorResponse, successResponse } from '../../../constant/i
 import {
   createTaskService,
   deleteTaskService,
+  getTaskAssignableUsersService,
   getTaskService,
   listTasksService,
   updateTaskService,
   updateTaskStatusService,
 } from '../services/task.service.js'
+
+export async function taskAssignableUsersController(req: Request, res: Response) {
+  const users = await getTaskAssignableUsersService(req.user!.id, req.user?.role)
+
+  return res.status(HTTP_STATUS.OK).json(successResponse('Assignable users fetched', users))
+}
 
 function getTaskIdParam(req: Request) {
   const taskId = req.params.taskId
