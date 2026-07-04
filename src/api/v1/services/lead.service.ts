@@ -14,8 +14,10 @@ import {
   normalizeOptionalText,
   normalizeRequiredText,
   toSafeLead,
+  leadCountryValues,
   type LeadRecord,
   type LeadSourceValue,
+  type LeadCountryValue,
   type LeadStatusValue,
 } from './lead.helpers.js'
 
@@ -28,6 +30,7 @@ type LeadListQuery = {
   createdById?: string
   serviceId?: string
   source?: string
+  country?: string
   assignment?: string
   payment?: string
   fromDate?: string
@@ -43,6 +46,7 @@ type LeadPayload = {
   phone: string
   whatsapp?: string | null
   city?: string | null
+  country?: LeadCountryValue
   address?: string | null
   message?: string | null
   status?: LeadStatusValue
@@ -63,6 +67,7 @@ type UpdateLeadPayload = {
   phone?: string
   whatsapp?: string | null
   city?: string | null
+  country?: LeadCountryValue
   address?: string | null
   status?: LeadStatusValue
   message: string
@@ -82,6 +87,7 @@ type LeadCreatePayload = {
   phone: string
   whatsapp: string | null
   city: string | null
+  country: LeadCountryValue
   address: string | null
   message: string | null
   status: LeadStatusValue
@@ -107,6 +113,7 @@ type NormalizedLeadUpdatePayload = {
   phone?: string
   whatsapp?: string | null
   city?: string | null
+  country?: LeadCountryValue
   address?: string | null
   departmentId?: string
   status: LeadStatusValue
@@ -130,6 +137,7 @@ const LEAD_SELECT = {
   phone: true,
   whatsapp: true,
   city: true,
+  country: true,
   address: true,
   message: true,
   status: true,
@@ -275,6 +283,7 @@ function buildLeadWhereClause(
   const where: Record<string, unknown> = {}
   const status = normalizeLeadStatus(query.status)
   const source = typeof query.source === 'string' ? query.source.trim().toUpperCase() : ''
+  const country = typeof query.country === 'string' ? query.country.trim().toUpperCase() : ''
   const search = query.search?.trim()
   const departmentId = query.departmentId?.trim()
   const city = query.city?.trim()
@@ -319,6 +328,10 @@ function buildLeadWhereClause(
 
   if (source) {
     where.source = source
+  }
+
+  if (country && leadCountryValues.includes(country as LeadCountryValue)) {
+    where.country = country
   }
 
   if (city) {
@@ -510,6 +523,7 @@ function normalizeLeadCreatePayload(payload: LeadPayload): LeadCreatePayload {
     totalAmount != null && receivingAmount != null ? totalAmount - receivingAmount : null
 
   const source = payload.source && leadSourceValues.includes(payload.source) ? payload.source : 'MANUAL'
+  const country = payload.country && leadCountryValues.includes(payload.country) ? payload.country : 'PAKISTAN'
 
   return {
     name: normalizeRequiredText(payload.name),
@@ -518,6 +532,7 @@ function normalizeLeadCreatePayload(payload: LeadPayload): LeadCreatePayload {
     phone: normalizeLeadPhone(payload.phone),
     whatsapp: normalizeOptionalText(payload.whatsapp),
     city: normalizeOptionalText(payload.city),
+    country,
     address: normalizeOptionalText(payload.address),
     message: normalizeOptionalText(payload.message),
     status: payload.status ?? 'NEW',
@@ -602,6 +617,7 @@ function normalizeLeadAdminUpdatePayload(
         ? normalizeOptionalText(payload.whatsapp)
         : currentLead.whatsapp,
     city: payload.city !== undefined ? normalizeOptionalText(payload.city) : currentLead.city,
+    country: payload.country ?? currentLead.country,
     address:
       payload.address !== undefined ? normalizeOptionalText(payload.address) : currentLead.address,
     message: normalizeRequiredText(payload.message),
@@ -880,6 +896,7 @@ export async function updateLeadService(
             phone: normalizedPayload.phone,
             whatsapp: normalizedPayload.whatsapp,
             city: normalizedPayload.city,
+            country: normalizedPayload.country,
             address: normalizedPayload.address,
             message: normalizedPayload.message,
             status: normalizedPayload.status,

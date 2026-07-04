@@ -42,6 +42,7 @@ export async function listLeadsController(req: Request, res: Response) {
     createdById: getStringQuery(req.query.createdById),
     serviceId: getStringQuery(req.query.serviceId),
     source: getStringQuery(req.query.source),
+    country: getStringQuery(req.query.country),
     assignment: getStringQuery(req.query.assignment),
     payment: getStringQuery(req.query.payment),
     fromDate: getStringQuery(req.query.fromDate),

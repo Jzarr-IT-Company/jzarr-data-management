@@ -83,6 +83,7 @@ model Lead {
   phone               String         @unique
   whatsapp            String?
   city                String?
+  country             LeadCountry    @default(PAKISTAN)
   address             String?
   message             String?
   status              LeadStatus     @default(NEW)
@@ -319,6 +320,12 @@ enum LeadSource {
   WEBSITE
   REFERRAL
   OTHER
+}
+
+enum LeadCountry {
+  PAKISTAN
+  UK
+  USA
 }
 
 enum TaskStatus {

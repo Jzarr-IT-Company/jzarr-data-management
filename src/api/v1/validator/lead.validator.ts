@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { leadSourceValues, leadStatusValues } from '../services/lead.helpers.js'
+import { leadCountryValues, leadSourceValues, leadStatusValues } from '../services/lead.helpers.js'
 
 const nullableText = z.string().trim().min(1).nullable().optional()
 const nullableFollowUpDateTime = z.string().datetime({ offset: true }).nullable().optional()
@@ -48,6 +48,7 @@ export const createLeadSchema = withFollowUpValidation(
     phone: z.string().trim().min(5),
     whatsapp: nullableText,
     city: nullableText,
+    country: z.enum(leadCountryValues).optional(),
     address: nullableText,
     message: nullableText,
     status: z.enum(leadStatusValues).optional(),
@@ -75,6 +76,7 @@ export const updateLeadSchema = withFollowUpValidation(
     phone: z.string().trim().min(5).optional(),
     whatsapp: nullableText,
     city: nullableText,
+    country: z.enum(leadCountryValues).optional(),
     address: nullableText,
     message: z.string().trim().min(1),
     status: z.enum(leadStatusValues),

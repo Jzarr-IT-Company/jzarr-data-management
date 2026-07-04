@@ -6,6 +6,10 @@ export const leadSourceValues = ['MANUAL', 'META', 'WHATSAPP', 'EMAIL', 'WEBSITE
 
 export type LeadSourceValue = (typeof leadSourceValues)[number]
 
+export const leadCountryValues = ['PAKISTAN', 'UK', 'USA'] as const
+
+export type LeadCountryValue = (typeof leadCountryValues)[number]
+
 type DepartmentSummary = {
   id: string
   name: string
@@ -56,6 +60,7 @@ export type LeadRecord = {
   phone: string
   whatsapp: string | null
   city: string | null
+  country: LeadCountryValue
   address: string | null
   message: string | null
   status: LeadStatusValue
@@ -93,6 +98,7 @@ export type SafeLead = {
   phone: string
   whatsapp: string | null
   city: string | null
+  country: LeadCountryValue
   address: string | null
   message: string | null
   status: LeadStatusValue
@@ -128,6 +134,7 @@ export function toSafeLead(lead: LeadRecord): SafeLead {
     phone,
     whatsapp,
     city,
+    country,
     address,
     message,
     status,
@@ -162,6 +169,7 @@ export function toSafeLead(lead: LeadRecord): SafeLead {
     phone,
     whatsapp,
     city,
+    country,
     address,
     message,
     status,
